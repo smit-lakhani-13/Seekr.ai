@@ -1,0 +1,21 @@
+name: seekr_companion_demo
+description: An accessibility-first Flutter prototype that simulates a companion app for an assistive wearable. Built to illustrate architecture, accessibility, and real-time audio handling — not a reproduction of any product.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  get: ^4.6.6          # state management + DI + routing (matches my production stack)
+  flutter_tts: ^4.0.0  # text-to-speech; supports web/iOS/Android/macOS/Windows
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
