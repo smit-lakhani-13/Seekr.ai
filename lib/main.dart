@@ -23,6 +23,7 @@ void main() => bootstrap(Flavor.dev);
 ///
 /// Build-time override: --dart-define=BACKEND_URL=https://your-gcp-url
 void bootstrap(Flavor flavor) {
+  WidgetsFlutterBinding.ensureInitialized();
   AppConfig.flavor = flavor;
 
   Get.put<DeviceService>(DeviceService());
