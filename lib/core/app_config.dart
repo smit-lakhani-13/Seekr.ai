@@ -42,7 +42,7 @@ class AppConfig {
       case Flavor.staging:
         return 'https://staging-seekr-api.example.com'; // TODO(human): replace with real staging URL
       case Flavor.prod:
-        return 'https://seekr-api.example.com'; // TODO(human): replace with real prod URL
+        return 'https://seekr-vision-api-agk63t25ja-el.a.run.app'; // Live Cloud Run backend
     }
   }
 }
