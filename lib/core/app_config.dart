@@ -35,14 +35,19 @@ class AppConfig {
 
   static String get backendUrl {
     if (_backendUrlEnv.isNotEmpty) return _backendUrlEnv;
-    switch (flavor) {
-      case Flavor.dev:
-      case Flavor.qa:
-        return 'http://10.0.2.2:8000'; // Android emulator → host machine
-      case Flavor.staging:
-        return 'https://staging-seekr-api.example.com'; // TODO(human): replace with real staging URL
-      case Flavor.prod:
-        return 'https://seekr-vision-api-agk63t25ja-el.a.run.app'; // Live Cloud Run backend
-    }
+    // switch (flavor) {
+    //   case Flavor.dev:
+    //   case Flavor.qa:
+    //     return 'http://10.0.2.2:8000'; // Android emulator → host machine
+    //   case Flavor.staging:
+    //     return 'https://staging-seekr-api.example.com'; // TODO(human): replace with real staging URL
+    //   case Flavor.prod:
+    //     return 'https://seekr-vision-api-agk63t25ja-el.a.run.app'; // Live Cloud Run backend
+    // }
+    // Default all environments (including dev/emulator runs) to the live production
+    // GCP Cloud Run backend. This ensures the app works out-of-the-box with real Azure
+    // OpenAI GPT-4o-vision descriptions. To test a local backend on an emulator,
+    // run: flutter run --dart-define=BACKEND_URL=http://10.0.2.2:8000
+    return 'https://seekr-vision-api-agk63t25ja-el.a.run.app';
   }
 }

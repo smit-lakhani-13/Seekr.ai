@@ -48,3 +48,6 @@ app.*.map.json
 backend/.venv/
 backend/.pytest_cache/
 backend/**/__pycache__/
+
+# Interview prep docs — local only
+docs/
