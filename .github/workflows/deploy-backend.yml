@@ -38,10 +38,32 @@ jobs:
 
       - name: Build and deploy backend
         run: |
-          gcloud builds submit \
+          BUILD_ID="$(gcloud builds submit \
             --project="${GCP_PROJECT_ID}" \
             --config=backend/cloudbuild.yaml \
-            .
+            --async \
+            --format='value(id)' \
+            .)"
+          echo "Cloud Build ID: ${BUILD_ID}"
+          echo "Cloud Build URL: https://console.cloud.google.com/cloud-build/builds/${BUILD_ID}?project=${GCP_PROJECT_ID}"
+
+          while true; do
+            STATUS="$(gcloud builds describe "${BUILD_ID}" \
+              --project="${GCP_PROJECT_ID}" \
+              --format='value(status)')"
+            echo "Cloud Build status: ${STATUS}"
+
+            case "${STATUS}" in
+              SUCCESS)
+                break
+                ;;
+              FAILURE|INTERNAL_ERROR|TIMEOUT|CANCELLED|EXPIRED)
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
 
       - name: Ensure public mobile access
         run: |
