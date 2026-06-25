@@ -105,6 +105,40 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('tapping active mode card toggles it off', (tester) async {
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pump();
+    final controller = Get.find<SeekrController>();
+
+    await tester.ensureVisible(find.text('Scene Detection'));
+    await tester.pump();
+    await tester.tap(find.text('Scene Detection'));
+    await tester.pump();
+    expect(controller.activeMode.value, SeekrMode.sceneDetection);
+
+    await tester.ensureVisible(find.text('Scene Detection'));
+    await tester.pump();
+    await tester.tap(find.text('Scene Detection'));
+    await tester.pump();
+    expect(controller.activeMode.value, SeekrMode.none);
+  });
+
+  testWidgets('Describe opens full-screen live camera view', (tester) async {
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pump();
+
+    await tester.ensureVisible(find.text('Describe'));
+    await tester.pump();
+    await tester.tap(find.text('Describe'));
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+
+    expect(find.text('Scene Detection'), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+  });
+
   testWidgets('no layout overflow on 320x568 small phone', (tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1.0;

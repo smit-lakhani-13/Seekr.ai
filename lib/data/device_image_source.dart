@@ -19,6 +19,10 @@ abstract class DeviceImageSource {
   /// Live preview widget (null for non-camera sources).
   CameraController? get cameraController;
 
+  /// Enable or disable the camera torch (flashlight).
+  /// Returns false when the current source/device does not support torch.
+  Future<bool> setTorchMode(bool enabled);
+
   Future<void> dispose();
 }
 
@@ -35,6 +39,8 @@ class SimulatedImageSource implements DeviceImageSource {
       List<int>.generate(1024, (i) => i % 256); // dummy bytes
   @override
   CameraController? get cameraController => null;
+  @override
+  Future<bool> setTorchMode(bool enabled) async => false;
   @override
   Future<void> dispose() async {}
 }

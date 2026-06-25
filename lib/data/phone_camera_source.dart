@@ -40,6 +40,7 @@ class PhoneCameraSource implements DeviceImageSource {
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
     await _controller!.initialize();
+    await setTorchMode(false);
     _ready = true;
   }
 
@@ -67,8 +68,23 @@ class PhoneCameraSource implements DeviceImageSource {
   }
 
   @override
+  Future<bool> setTorchMode(bool enabled) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return false;
+    try {
+      await controller.setFlashMode(
+        enabled ? FlashMode.torch : FlashMode.off,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<void> dispose() async {
     _ready = false;
+    await setTorchMode(false);
     await _controller?.dispose();
     _controller = null;
   }

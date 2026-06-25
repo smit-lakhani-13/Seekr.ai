@@ -16,7 +16,8 @@ import '../services/tts_service.dart';
 ///
 /// Flow:  device stream  ->  active mode logic  ->  audio queue  ->  TTS
 /// Depth/Obstacle mode feeds distances to an obstacle alerter (threshold +
-/// cooldown so it never spams). Descriptive modes emit periodic descriptions.
+/// cooldown so it never spams). Descriptive modes are selected here; actual
+/// live descriptions run in the full-screen camera view.
 class SeekrController extends GetxController {
   final DeviceService _device;
   final TtsService _tts;
@@ -39,9 +40,8 @@ class SeekrController extends GetxController {
   // ----- internals -----
   StreamSubscription<double>? _distanceSub;
   StreamSubscription<DeviceConnectionState>? _connSub;
-  Timer? _descriptionTimer;
   DateTime? _lastObstacleAlert;
-  int _sceneIndex = 0;
+  String? _lastLiveText;
 
   static const Duration _cooldown = Duration(seconds: 3);
 
@@ -62,21 +62,52 @@ class SeekrController extends GetxController {
 
   void selectMode(SeekrMode mode) {
     activeMode.value = mode;
-    _audio.clear();
-    nowSpeaking.value = null;
-    _descriptionTimer?.cancel();
+    stopSpeaking();
+    _lastLiveText = null;
     _announce(
         '${mode.label} activated. ${mode.description}', AudioPriority.normal);
+  }
 
-    final descriptive = mode == SeekrMode.sceneDetection ||
-        mode == SeekrMode.textRecognition ||
-        mode == SeekrMode.supermarket;
-    if (descriptive) {
-      _descriptionTimer = Timer.periodic(
-        const Duration(seconds: 5),
-        (_) => _emitDescription(mode),
-      );
+  /// Tap active mode → stop. Tap inactive mode → activate.
+  void toggleMode(SeekrMode mode) {
+    if (activeMode.value == mode) {
+      stopMode();
+    } else {
+      selectMode(mode);
     }
+  }
+
+  /// Stop the current mode, clear audio, reset to none.
+  void stopMode() {
+    final stoppedMode = activeMode.value;
+    activeMode.value = SeekrMode.none;
+    _lastLiveText = null;
+    stopSpeaking();
+    if (stoppedMode != SeekrMode.none) {
+      spokenLog.insert(0, '${stoppedMode.label} stopped.');
+      if (spokenLog.length > 20) spokenLog.removeLast();
+    }
+  }
+
+  void stopSpeaking() {
+    _audio.clear();
+    nowSpeaking.value = null;
+  }
+
+  /// Called by the full-screen camera view before starting its live loop.
+  void prepareLiveMode(SeekrMode mode) {
+    activeMode.value = mode;
+    _lastLiveText = null;
+    stopSpeaking();
+  }
+
+  /// Speak live-view text only when it changes (dedup prevents repeated TTS).
+  bool announceLive(String text) {
+    final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty || normalized == _lastLiveText) return false;
+    _lastLiveText = normalized;
+    _announce(text, AudioPriority.normal);
+    return true;
   }
 
   void _onDistance(double d) {
@@ -94,38 +125,6 @@ class SeekrController extends GetxController {
       'Obstacle ${d.toStringAsFixed(1)} metres ahead',
       AudioPriority.safety, // interrupts any current description
     );
-  }
-
-  void _emitDescription(SeekrMode mode) {
-    final samples = _samplesFor(mode);
-    final text = samples[_sceneIndex % samples.length];
-    _sceneIndex++;
-    _announce(text, AudioPriority.normal);
-  }
-
-  List<String> _samplesFor(SeekrMode mode) {
-    switch (mode) {
-      case SeekrMode.sceneDetection:
-        return const [
-          'A bright room with a window on your left and two people seated ahead.',
-          'An open doorway about three metres in front of you.',
-          'A pavement with a bench on the right.',
-        ];
-      case SeekrMode.textRecognition:
-        return const [
-          'Sign reads: Platform 2, trains to the city centre.',
-          'Menu: coffee, two dollars fifty. Tea, two dollars.',
-          'Label reads: paracetamol, take one tablet twice daily.',
-        ];
-      case SeekrMode.supermarket:
-        return const [
-          'Aisle 4: breakfast cereals on your right.',
-          'Product: one litre whole milk, expires in five days.',
-          'Aisle 7: cleaning supplies ahead.',
-        ];
-      default:
-        return const ['No description available.'];
-    }
   }
 
   /// Snapshot-on-trigger: initialize source if needed, capture one frame,
@@ -164,6 +163,38 @@ class SeekrController extends GetxController {
     }
   }
 
+  /// Fast live-camera path: Tier 1 only, no cloud upload. This keeps the
+  /// full-screen view responsive and avoids sending continuous video frames.
+  Future<String> describeLiveFrame(SeekrMode mode) async {
+    final effectiveMode =
+        mode == SeekrMode.none ? SeekrMode.sceneDetection : mode;
+
+    final source = Get.find<DeviceImageSource>();
+    if (!source.isReady) {
+      await source.initialize();
+    }
+    cameraController.value = source.cameraController;
+
+    if (effectiveMode == SeekrMode.depthObstacle) {
+      final distance = lastDistance.value;
+      return distance == null
+          ? 'Obstacle mode active. No distance reading yet.'
+          : 'Nearest object ${distance.toStringAsFixed(1)} metres ahead.';
+    }
+
+    final bytes = await source.captureFrame();
+    final local = Get.find<LocalVisionService>();
+    final result = await local.analyze(bytes, effectiveMode);
+    if (result != null && result.trim().isNotEmpty) return result;
+
+    return switch (effectiveMode) {
+      SeekrMode.textRecognition => 'No text detected yet.',
+      SeekrMode.supermarket => 'No product detected yet.',
+      SeekrMode.sceneDetection => 'Looking around. Nothing clear detected yet.',
+      _ => 'Looking around. Nothing clear detected yet.',
+    };
+  }
+
   void _announce(String text, AudioPriority priority) {
     _audio.enqueue(Utterance(text, priority));
     spokenLog.insert(0, text);
@@ -174,7 +205,6 @@ class SeekrController extends GetxController {
   void onClose() {
     _distanceSub?.cancel();
     _connSub?.cancel();
-    _descriptionTimer?.cancel();
     cameraController.value = null;
     _device.dispose();
     // Fire-and-forget async dispose of platform resources.
