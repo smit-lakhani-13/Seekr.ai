@@ -47,6 +47,13 @@ class HttpCloudVisionService implements CloudVisionService {
     String? question,
   }) =>
       _connectivity.withRetry(() async {
+        final cellularResult = await _describeViaCellular(
+          imageBytes,
+          mode,
+          question: question,
+        );
+        if (cellularResult != null) return cellularResult;
+
         final request = http.MultipartRequest(
           'POST',
           Uri.parse('${AppConfig.backendUrl}/describe'),
@@ -68,6 +75,27 @@ class HttpCloudVisionService implements CloudVisionService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data['text'] as String;
       });
+
+  Future<String?> _describeViaCellular(
+    List<int> imageBytes,
+    SeekrMode mode, {
+    String? question,
+  }) async {
+    final response = await _connectivity.postJsonViaCellular(
+      uri: Uri.parse('${AppConfig.backendUrl}/describe_json'),
+      body: {
+        'image_base64': base64Encode(imageBytes),
+        'task': _taskFor(mode),
+        if (question != null) 'question': question,
+      },
+    );
+    if (response == null) return null;
+    if (response.statusCode != 200) {
+      throw Exception('Cloud API ${response.statusCode}');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return data['text'] as String;
+  }
 
   @override
   Future<CloudHealth> health() async {

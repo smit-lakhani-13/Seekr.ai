@@ -10,6 +10,7 @@ import '../data/device_service.dart';
 import '../services/vision_router.dart';
 import '../domain/models.dart';
 import '../services/audio_queue.dart';
+import '../services/cloud_vision_service.dart';
 import '../services/live_speech_policy.dart';
 import '../services/tts_service.dart';
 
@@ -158,9 +159,7 @@ class SeekrController extends GetxController {
       final router = Get.find<VisionRouter>();
       final description = await router.route(
         bytes,
-        activeMode.value == SeekrMode.none
-            ? SeekrMode.sceneDetection
-            : activeMode.value,
+        activeMode.value,
         triggered: true,
       );
       _announce(description, AudioPriority.normal);
@@ -173,17 +172,17 @@ class SeekrController extends GetxController {
 
   /// Fast live-camera path: Tier 1 only, no cloud upload. This keeps the
   /// full-screen view responsive and avoids sending continuous video frames.
-  Future<String> describeLiveFrame(SeekrMode mode) async {
-    final effectiveMode =
-        mode == SeekrMode.none ? SeekrMode.textRecognition : mode;
-
+  Future<String> describeLiveFrame(
+    SeekrMode mode, {
+    bool enrichWithCloud = false,
+  }) async {
     final source = Get.find<DeviceImageSource>();
     if (!source.isReady) {
       await source.initialize();
     }
     cameraController.value = source.cameraController;
 
-    if (effectiveMode == SeekrMode.depthObstacle) {
+    if (mode == SeekrMode.depthObstacle) {
       final distance = lastDistance.value;
       return distance == null
           ? 'Obstacle mode active. No distance reading yet.'
@@ -191,14 +190,29 @@ class SeekrController extends GetxController {
     }
 
     final bytes = await source.captureFrame();
+
+    if (enrichWithCloud &&
+        (mode == SeekrMode.none || mode == SeekrMode.sceneDetection) &&
+        Get.find<ConnectivityService>().isOnline) {
+      try {
+        return await Get.find<CloudVisionService>().describe(
+          bytes,
+          SeekrMode.sceneDetection,
+        );
+      } catch (_) {
+        // Fall through to Tier-1 local result.
+      }
+    }
+
     final local = Get.find<LocalVisionService>();
-    final result = await local.analyze(bytes, effectiveMode);
+    final result = await local.analyze(bytes, mode);
     if (result != null && result.trim().isNotEmpty) return result;
 
-    return switch (effectiveMode) {
+    return switch (mode) {
       SeekrMode.textRecognition => 'No text detected yet.',
       SeekrMode.supermarket => 'No product detected yet.',
       SeekrMode.sceneDetection => 'Looking around. Nothing clear detected yet.',
+      SeekrMode.none => 'Looking around. Nothing clear detected yet.',
       _ => 'Looking around. Nothing clear detected yet.',
     };
   }

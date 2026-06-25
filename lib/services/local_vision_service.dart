@@ -19,7 +19,7 @@ abstract class LocalVisionService {
 class MlKitLocalVisionService implements LocalVisionService {
   final _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
   final _labeler =
-      ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.5));
+      ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.65));
   final _barcodeScanner = BarcodeScanner();
 
   /// Write bytes to a temp file; ML Kit works reliably with file paths for JPEG.
@@ -35,6 +35,8 @@ class MlKitLocalVisionService implements LocalVisionService {
     try {
       final img = await _toInputImage(imageBytes);
       switch (mode) {
+        case SeekrMode.none:
+          return await _autoDescribe(img);
         case SeekrMode.textRecognition:
           return await _readText(img);
         case SeekrMode.sceneDetection:
@@ -66,8 +68,45 @@ class MlKitLocalVisionService implements LocalVisionService {
     return 'I can see text: $summary';
   }
 
-  // ML Kit frequently misclassifies consumer electronics as these — blocklist them.
+  Future<String?> _autoDescribe(InputImage img) async {
+    final text = await _readText(img);
+    final scene = await _labelScene(img, preferText: false);
+
+    if (text != null && scene != null) {
+      return '$text. $scene';
+    }
+    return text ?? scene;
+  }
+
+  // ML Kit Image Labeling is broad, not precise object detection. These labels
+  // are too generic or frequently wrong in the live demo, so never speak them as facts.
   static const _labelBlocklist = {
+    'metal',
+    'wood',
+    'plastic',
+    'glass',
+    'rubber',
+    'material property',
+    'font',
+    'pattern',
+    'design',
+    'product',
+    'brand',
+    'event',
+    'room',
+    'floor',
+    'ceiling',
+    'wall',
+    'hand',
+    'arm',
+    'leg',
+    'finger',
+    'skin',
+    'flesh',
+    'gesture',
+    'food',
+    'chair',
+    'tableware',
     'musical instrument',
     'string instrument',
     'bowed string instrument',
@@ -78,22 +117,34 @@ class MlKitLocalVisionService implements LocalVisionService {
     'keyboard instrument',
   };
 
-  Future<String?> _labelScene(InputImage img) async {
+  Future<String?> _labelScene(
+    InputImage img, {
+    bool preferText = true,
+  }) async {
     // Text is more specific than generic labels — try OCR first.
-    final textResult = await _readText(img);
-    if (textResult != null) return textResult;
+    if (preferText) {
+      final textResult = await _readText(img);
+      if (textResult != null) return textResult;
+    }
 
     final labels = await _labeler.processImage(img);
     if (labels.isEmpty) return null;
     final names = labels
-        .take(5)
-        .map((l) => l.label.toLowerCase())
-        .where((l) => l.length > 3)
-        .where((l) => !_labelBlocklist.contains(l))
+        .where((l) => l.confidence >= 0.65)
+        .map((l) => l.label.toLowerCase().trim())
+        .where(_isUsefulLabel)
         .take(3)
         .toList();
     if (names.isEmpty) return null;
-    return 'I can see: ${names.join(', ')}.';
+    return 'I can see ${_joinNatural(names)}.';
+  }
+
+  bool _isUsefulLabel(String label) {
+    if (label.length < 4) return false;
+    if (_labelBlocklist.contains(label)) return false;
+    if (label.contains('instrument')) return false;
+    if (label.contains('material')) return false;
+    return true;
   }
 
   Future<String?> _scanProduct(InputImage img) async {
@@ -104,8 +155,20 @@ class MlKitLocalVisionService implements LocalVisionService {
     }
     final labels = await _labeler.processImage(img);
     if (labels.isEmpty) return null;
-    final top = labels.take(2).map((l) => l.label).join(', ');
-    return 'I can see product-like items: $top';
+    final top = labels
+        .where((l) => l.confidence >= 0.65)
+        .map((l) => l.label.toLowerCase().trim())
+        .where(_isUsefulLabel)
+        .take(2)
+        .toList();
+    if (top.isEmpty) return null;
+    return 'I can see product-like items: ${_joinNatural(top)}.';
+  }
+
+  String _joinNatural(List<String> items) {
+    if (items.length == 1) return items.first;
+    if (items.length == 2) return '${items.first} and ${items.last}';
+    return '${items.sublist(0, items.length - 1).join(', ')}, and ${items.last}';
   }
 
   @override

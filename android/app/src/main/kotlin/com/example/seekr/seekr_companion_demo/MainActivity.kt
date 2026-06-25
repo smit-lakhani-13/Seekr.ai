@@ -14,6 +14,10 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : FlutterActivity() {
     private val DEVICE_CHANNEL = "seekr/device"
@@ -56,6 +60,11 @@ class MainActivity : FlutterActivity() {
                     // Requests and holds a cellular Network object. After connectToDeviceAP claims the
                     // device WiFi as a local-only network, cellular is already the default route.
                     "requestCellularNetwork" -> requestCellularNetwork(result)
+                    "postJsonViaCellular" -> postJsonViaCellular(
+                        call.argument("url"),
+                        call.argument("body"),
+                        result
+                    )
                     "releaseDeviceAP" -> {
                         releaseDeviceAP()
                         result.success(null)
@@ -145,6 +154,12 @@ class MainActivity : FlutterActivity() {
                 cellularNetwork = network
                 mainHandler.post { result.success(true) }
             }
+            override fun onUnavailable() {
+                cellularNetwork = null
+                mainHandler.post {
+                    result.error("UNAVAILABLE", "Cellular network unavailable", null)
+                }
+            }
             override fun onLost(network: Network) {
                 cellularNetwork = null
                 mainHandler.post { networkLostSink?.success("cellular_lost") }
@@ -152,6 +167,47 @@ class MainActivity : FlutterActivity() {
         }
         cellularCallback = callback
         cm.requestNetwork(request, callback)
+    }
+
+    private fun postJsonViaCellular(url: String?, body: String?, result: MethodChannel.Result) {
+        val network = cellularNetwork
+        if (network == null) {
+            result.error("NO_CELLULAR", "No cellular network is currently held", null)
+            return
+        }
+        if (url == null || body == null) {
+            result.error("INVALID_ARG", "url and body are required", null)
+            return
+        }
+
+        Thread {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = network.openConnection(URL(url)) as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 15000
+                conn.readTimeout = 30000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+
+                val code = conn.responseCode
+                val stream = if (code in 200..399) conn.inputStream else conn.errorStream
+                val responseBody = stream?.use { input ->
+                    BufferedReader(InputStreamReader(input)).readText()
+                } ?: ""
+
+                mainHandler.post {
+                    result.success(mapOf("statusCode" to code, "body" to responseBody))
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    result.error("CELLULAR_HTTP_FAILED", e.message, null)
+                }
+            } finally {
+                conn?.disconnect()
+            }
+        }.start()
     }
 
     private fun releaseCellularNetwork() {

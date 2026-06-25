@@ -9,6 +9,7 @@ import '../core/app_config.dart';
 import '../controllers/seekr_controller.dart';
 import '../domain/models.dart';
 import '../services/cloud_vision_service.dart';
+import '../services/connectivity_service.dart';
 import 'camera_live_view.dart';
 import 'widgets/camera_preview_box.dart';
 
@@ -324,11 +325,8 @@ class _CameraPreviewCard extends StatelessWidget {
   final SeekrController c;
 
   void _openLiveCamera() {
-    final mode = c.activeMode.value == SeekrMode.none
-        ? SeekrMode.textRecognition
-        : c.activeMode.value;
     Get.to<void>(
-      () => CameraLiveView(initialMode: mode),
+      () => CameraLiveView(initialMode: c.activeMode.value),
       transition: Transition.downToUp,
     );
   }
@@ -411,13 +409,25 @@ class _NetworkArchCard extends StatefulWidget {
 class _NetworkArchCardState extends State<_NetworkArchCard> {
   List<ConnectivityResult> _types = [];
   StreamSubscription<List<ConnectivityResult>>? _sub;
+  StreamSubscription<CloudRouteState>? _routeSub;
   Timer? _healthTimer;
   CloudHealth? _health;
+  CloudRouteState _route = const CloudRouteState(
+    preferCellular: false,
+    cellularReady: false,
+    lastMessage: 'Default internet route',
+  );
   bool _checkingHealth = false;
 
   @override
   void initState() {
     super.initState();
+    _route = Get.find<ConnectivityService>().cloudRouteState;
+    _routeSub = Get.find<ConnectivityService>().cloudRouteStream.listen(
+      (route) {
+        if (mounted) setState(() => _route = route);
+      },
+    );
     _load();
     _refreshHealth();
     _healthTimer = Timer.periodic(
@@ -465,6 +475,7 @@ class _NetworkArchCardState extends State<_NetworkArchCard> {
   @override
   void dispose() {
     _sub?.cancel();
+    _routeSub?.cancel();
     _healthTimer?.cancel();
     super.dispose();
   }
@@ -506,6 +517,14 @@ class _NetworkArchCardState extends State<_NetworkArchCard> {
     final cs = Theme.of(context).colorScheme;
     final hasCellular = _types.contains(ConnectivityResult.mobile);
     final hasWifi = _types.contains(ConnectivityResult.wifi);
+    final observedRoute = hasCellular
+        ? 'mobile + ${hasWifi ? 'WiFi' : 'no WiFi'}'
+        : hasWifi
+            ? 'WiFi active'
+            : 'Offline';
+    final cloudRouteValue = _route.preferCellular
+        ? (_route.cellularReady ? 'Mobile data' : 'Requesting mobile data')
+        : 'Default internet';
     final health = _health;
     final backendValue = health == null
         ? 'Checking...'
@@ -558,22 +577,45 @@ class _NetworkArchCardState extends State<_NetworkArchCard> {
             const SizedBox(height: 6),
             _NetRow(
               icon: Icons.cloud_rounded,
-              label: 'Cloud AI',
-              value: hasCellular
-                  ? 'Mobile data'
-                  : hasWifi
-                      ? 'WiFi'
-                      : 'Offline',
-              detail: hasCellular
-                  ? 'Bound to cellular socket — bypasses device WiFi'
-                  : hasWifi
-                      ? 'Using WiFi (no cellular detected)'
-                      : 'No internet — Tier-1 only',
+              label: 'Observed internet',
+              value: observedRoute,
+              detail: hasWifi
+                  ? 'WiFi can stay connected for device frames'
+                  : 'Tier-1 remains available without internet',
               color: hasCellular
                   ? const Color(0xFF4CAF50)
                   : hasWifi
                       ? const Color(0xFFFF9800)
                       : cs.error,
+            ),
+            const SizedBox(height: 6),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              secondary: Icon(
+                Icons.swap_horiz_rounded,
+                color: _route.preferCellular ? cs.primary : cs.onSurfaceVariant,
+              ),
+              title: const Text('Prefer mobile data for cloud'),
+              subtitle: Text(_route.lastMessage),
+              value: _route.preferCellular,
+              onChanged: (value) {
+                Get.find<ConnectivityService>()
+                    .setPreferCellularForCloud(value);
+              },
+            ),
+            _NetRow(
+              icon: Icons.route_rounded,
+              label: 'Cloud route',
+              value: cloudRouteValue,
+              detail: _route.preferCellular
+                  ? 'Cloud HTTP uses Android cellular Network when available'
+                  : 'Cloud HTTP uses Android default route',
+              color: _route.cellularReady
+                  ? const Color(0xFF4CAF50)
+                  : _route.preferCellular
+                      ? const Color(0xFFFF9800)
+                      : cs.onSurfaceVariant,
             ),
             const SizedBox(height: 6),
             _NetRow(

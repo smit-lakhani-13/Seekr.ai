@@ -38,6 +38,11 @@ class _MockCloud implements CloudVisionService {
 
 class _MockConn implements ConnectivityService {
   final bool online;
+  final _route = const CloudRouteState(
+    preferCellular: false,
+    cellularReady: false,
+    lastMessage: 'Default internet route',
+  );
   _MockConn(this.online);
   @override
   bool get isOnline => online;
@@ -49,6 +54,18 @@ class _MockConn implements ConnectivityService {
   Future<void> disconnectFromDeviceAP() async {}
   @override
   Future<void> requestCellular() async {}
+  @override
+  CloudRouteState get cloudRouteState => _route;
+  @override
+  Stream<CloudRouteState> get cloudRouteStream => Stream.value(_route);
+  @override
+  Future<void> setPreferCellularForCloud(bool enabled) async {}
+  @override
+  Future<NativeHttpResponse?> postJsonViaCellular({
+    required Uri uri,
+    required Map<String, dynamic> body,
+  }) async =>
+      null;
   @override
   Future<T> withRetry<T>(Future<T> Function() call,
           {AudioQueue? audioQueue, int maxRetries = 1}) =>

@@ -132,7 +132,7 @@ void main() {
     await tester.tap(find.text('Describe'));
     await tester.pumpAndSettle(const Duration(seconds: 1));
 
-    expect(find.text('Text Recognition'), findsOneWidget);
+    expect(find.text('Auto Describe'), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_rounded));
@@ -149,6 +149,7 @@ void main() {
     expect(find.text('Phone Camera (demo)'), findsOneWidget);
     expect(find.text('Backend:'), findsOneWidget);
     expect(find.text('Cloud policy:'), findsOneWidget);
+    expect(find.text('Prefer mobile data for cloud'), findsOneWidget);
   });
 
   testWidgets('no layout overflow on 320x568 small phone', (tester) async {

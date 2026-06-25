@@ -24,11 +24,14 @@ class CameraLiveView extends StatefulWidget {
 class _CameraLiveViewState extends State<CameraLiveView> {
   static const _captureInterval = Duration(seconds: 1);
   static const _captureTimeout = Duration(seconds: 4);
+  static const _cloudInterval = Duration(seconds: 8);
+  static const _cloudTimeout = Duration(seconds: 10);
 
   late final SeekrController _controller;
   late final DeviceImageSource _source;
   late final SeekrMode _mode;
   Timer? _timer;
+  Timer? _cloudTimer;
   bool _initializing = true;
   bool _processing = false;
   bool _torchOn = false;
@@ -41,9 +44,7 @@ class _CameraLiveViewState extends State<CameraLiveView> {
     super.initState();
     _controller = Get.find<SeekrController>();
     _source = Get.find<DeviceImageSource>();
-    _mode = widget.initialMode == SeekrMode.none
-        ? SeekrMode.textRecognition
-        : widget.initialMode;
+    _mode = widget.initialMode;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_start());
     });
@@ -64,6 +65,12 @@ class _CameraLiveViewState extends State<CameraLiveView> {
       });
       await _analyzeFrame();
       _timer = Timer.periodic(_captureInterval, (_) => _analyzeFrame());
+      if (_mode == SeekrMode.none || _mode == SeekrMode.sceneDetection) {
+        _cloudTimer = Timer.periodic(
+          _cloudInterval,
+          (_) => _analyzeFrame(enrichWithCloud: true),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -73,13 +80,15 @@ class _CameraLiveViewState extends State<CameraLiveView> {
     }
   }
 
-  Future<void> _analyzeFrame() async {
+  Future<void> _analyzeFrame({bool enrichWithCloud = false}) async {
     if (_processing || !mounted || _released) return;
     final ticket = _frameGate.begin();
     _processing = true;
     try {
-      final description =
-          await _controller.describeLiveFrame(_mode).timeout(_captureTimeout);
+      final timeout = enrichWithCloud ? _cloudTimeout : _captureTimeout;
+      final description = await _controller
+          .describeLiveFrame(_mode, enrichWithCloud: enrichWithCloud)
+          .timeout(timeout);
       if (!mounted || _released || !_frameGate.tryApply(ticket)) return;
       setState(() => _status = description);
       // Obstacle alerts are driven by _onDistance (safety priority + cooldown).
@@ -119,7 +128,9 @@ class _CameraLiveViewState extends State<CameraLiveView> {
     _released = true;
     _frameGate.reset();
     _timer?.cancel();
+    _cloudTimer?.cancel();
     _timer = null;
+    _cloudTimer = null;
     _controller.stopSpeaking();
     _controller.cameraController.value = null;
     await _source.setTorchMode(false);
@@ -131,7 +142,9 @@ class _CameraLiveViewState extends State<CameraLiveView> {
     _released = true;
     _frameGate.reset();
     _timer?.cancel();
+    _cloudTimer?.cancel();
     _timer = null;
+    _cloudTimer = null;
     _controller.stopSpeaking();
     _controller.cameraController.value = null;
     _source.setTorchMode(false).ignore();
@@ -197,7 +210,9 @@ class _CameraLiveViewState extends State<CameraLiveView> {
                             vertical: 10,
                           ),
                           child: Text(
-                            _mode.label,
+                            _mode == SeekrMode.none
+                                ? 'Auto Describe'
+                                : _mode.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,

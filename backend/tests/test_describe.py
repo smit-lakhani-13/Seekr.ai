@@ -48,6 +48,31 @@ async def test_describe_ocr():
 
 
 @pytest.mark.asyncio
+async def test_describe_json_scene():
+    import base64
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post(
+            "/describe_json",
+            json={"image_base64": base64.b64encode(_FAKE_JPEG).decode(), "task": "scene"},
+        )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["provider"] == "mock"
+    assert body["text"]
+
+
+@pytest.mark.asyncio
+async def test_describe_json_invalid_base64_returns_422():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post(
+            "/describe_json",
+            json={"image_base64": "not valid base64", "task": "scene"},
+        )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_describe_vqa_with_question():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post(
