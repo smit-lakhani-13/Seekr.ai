@@ -15,6 +15,8 @@ uv run uvicorn app.main:app --reload
 uv run pytest tests/ -v
 ```
 
+Current gate: `9 passed`.
+
 ## Call the endpoint
 
 ```bash
@@ -34,6 +36,29 @@ Tasks: `scene` | `ocr` | `vqa` | `product`. For `vqa`, also pass `-F "question=W
 | `AZURE_OPENAI_API_KEY` | — | TODO(human): set to your Azure API key. `AZURE_OPENAI_KEY` is also accepted for compatibility. |
 | `AZURE_OPENAI_DEPLOYMENT` | `gpt-5.4-mini` | Deployment name |
 | `AZURE_OPENAI_API_VERSION` | `2024-05-01-preview` | API version |
+
+## Deploy
+
+Live Cloud Run URL:
+
+```bash
+https://seekr-vision-api-agk63t25ja-el.a.run.app
+```
+
+Manual deploy:
+
+```bash
+GCP_PROJECT_ID=intrepid-stock-393909 bash backend/deploy.sh
+```
+
+CI/CD:
+
+- `.github/workflows/deploy-backend.yml` deploys automatically on pushes to `main`
+  that touch `backend/**`.
+- Google auth uses Workload Identity Federation, not a committed service account key.
+- Runtime Azure key is mounted from Secret Manager secret
+  `seekr-azure-openai-api-key`.
+- Provider mode is `azure_openai` with `AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini`.
 
 ## Security notes
 

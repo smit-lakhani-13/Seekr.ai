@@ -1,7 +1,7 @@
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from .models import DescribeResponse
-from .providers import get_provider
+from .providers import VisionProviderError, get_provider
 
 app = FastAPI(title="Seekr Vision API", version="0.1.0")
 
@@ -31,5 +31,8 @@ async def describe(
 
     # Provider is stateless; per-request construction keeps mock/live selection simple.
     provider = get_provider()
-    text = await provider.describe(image_bytes=image_bytes, task=task, question=question)
+    try:
+        text = await provider.describe(image_bytes=image_bytes, task=task, question=question)
+    except VisionProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return DescribeResponse(text=text, provider=provider.name)

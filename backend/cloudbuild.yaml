@@ -1,10 +1,10 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/seekr-vision-api:$COMMIT_SHA', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/seekr-vision-api:$BUILD_ID', '.']
     dir: 'backend'
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/seekr-vision-api:$COMMIT_SHA']
+    args: ['push', 'gcr.io/$PROJECT_ID/seekr-vision-api:$BUILD_ID']
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -12,11 +12,12 @@ steps:
       - run
       - deploy
       - seekr-vision-api
-      - --image=gcr.io/$PROJECT_ID/seekr-vision-api:$COMMIT_SHA
+      - --image=gcr.io/$PROJECT_ID/seekr-vision-api:$BUILD_ID
       - --region=asia-south1
       - --platform=managed
       - --allow-unauthenticated
-      - '--set-env-vars=VISION_PROVIDER=mock'
+      - '--set-env-vars=VISION_PROVIDER=azure_openai,AZURE_OPENAI_ENDPOINT=https://genzchatbot2.openai.azure.com/,AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini,AZURE_OPENAI_API_VERSION=2024-05-01-preview'
+      - '--set-secrets=AZURE_OPENAI_API_KEY=seekr-azure-openai-api-key:latest'
 
 images:
-  - 'gcr.io/$PROJECT_ID/seekr-vision-api:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/seekr-vision-api:$BUILD_ID'

@@ -1,0 +1,60 @@
+name: Deploy Seekr Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/deploy-backend.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: intrepid-stock-393909
+  GCP_REGION: asia-south1
+  CLOUD_RUN_SERVICE: seekr-vision-api
+
+jobs:
+  deploy:
+    name: Build and deploy Cloud Run backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1019311364227/locations/global/workloadIdentityPools/seekr-github-pool/providers/seekr-github-provider
+          service_account: seekr-github-deploy@intrepid-stock-393909.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and deploy backend
+        run: |
+          gcloud builds submit \
+            --project="${GCP_PROJECT_ID}" \
+            --config=backend/cloudbuild.yaml \
+            .
+
+      - name: Ensure public mobile access
+        run: |
+          gcloud beta run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --member=allUsers \
+            --role=roles/run.invoker
+
+      - name: Smoke test health endpoint
+        run: |
+          SERVICE_URL="$(gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format='value(status.url)')"
+          curl --fail --show-error --silent "${SERVICE_URL}/health"

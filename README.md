@@ -21,7 +21,7 @@ TIER 1 — PHONE, ON-DEVICE (ML Kit, offline, instant, free)
 
 TIER 2 — CLOUD (FastAPI on GCP/Azure, on explicit trigger only)
   Heavy, user-triggered tasks:
-  ├── Rich scene description    → GPT-4o-vision via Azure OpenAI
+  ├── Rich scene description    → GPT-5.4 Mini vision deployment via Azure OpenAI
   ├── Complex OCR fallback      → when ML Kit returns nothing
   └── Product enrichment        → when barcode scan returns nothing
   One compressed JPEG (<150 KB) sent per trigger. Never a continuous stream.
@@ -52,7 +52,7 @@ flutter run                          # pick Android/iOS device
 flutter build apk --debug            # debug APK → build/app/outputs/flutter-apk/app-debug.apk
 flutter build apk --release \
   --target=lib/main_prod.dart \
-  --dart-define=BACKEND_URL=https://your-cloud-run-url  # release APK
+  --dart-define=BACKEND_URL=https://seekr-vision-api-agk63t25ja-el.a.run.app
 ```
 
 **Flavors** (separate entry points, real backend URL via dart-define):
@@ -63,10 +63,16 @@ flutter run --target=lib/main_dev.dart
 # production (point at deployed backend)
 flutter build apk --release \
   --target=lib/main_prod.dart \
-  --dart-define=BACKEND_URL=https://your-gcp-url
+  --dart-define=BACKEND_URL=https://seekr-vision-api-agk63t25ja-el.a.run.app
 ```
 
 Default `BACKEND_URL` is `http://10.0.2.2:8000` (Android emulator → localhost).
+
+Current deployed backend:
+
+```bash
+curl https://seekr-vision-api-agk63t25ja-el.a.run.app/health
+```
 
 ---
 
@@ -105,6 +111,23 @@ uv run uvicorn app.main:app --reload
 cd backend
 uv run pytest -v
 ```
+
+## Deploy Backend
+
+The production backend is deployed to Google Cloud Run in project `intrepid-stock-393909`,
+region `asia-south1`, service `seekr-vision-api`.
+
+```bash
+GCP_PROJECT_ID=intrepid-stock-393909 bash backend/deploy.sh
+```
+
+Deployment uses `backend/cloudbuild.yaml`. The Azure OpenAI API key is mounted from
+Secret Manager secret `seekr-azure-openai-api-key`; do not put the key in GitHub,
+README files, or shell history.
+
+CI/CD is configured in `.github/workflows/deploy-backend.yml`: every push to `main`
+that changes `backend/**` or the workflow rebuilds the container, deploys Cloud Run,
+reapplies public mobile access, and smoke-tests `/health`.
 
 ---
 
@@ -155,9 +178,9 @@ backend/
     providers/
       __init__.py             VisionProvider ABC + get_provider() factory
       mock_provider.py        mock (default, no keys needed)
-      azure_openai_provider.py  GPT-4o-vision via Azure OpenAI (set env vars)
+      azure_openai_provider.py  GPT-5.4 Mini vision deployment via Azure OpenAI
   tests/
-    test_describe.py          7 pytest-asyncio tests (keyless, uses mock)
+    test_describe.py          9 pytest-asyncio tests (keyless mock + provider error hardening)
 
 android/app/src/main/kotlin/.../MainActivity.kt
                               seekr/network MethodChannel:
@@ -174,7 +197,7 @@ These cannot be automated — flag them as manual-only during demo:
 | What | Why |
 |------|-----|
 | Dual-network (device WiFi + cellular simultaneously) | Needs physical Android with SIM + separate no-internet WiFi. `WifiNetworkSpecifier` is Android 10+. |
-| Azure OpenAI vision end-to-end | Needs `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY` set. |
+| Azure OpenAI vision end-to-end | Live backend is deployed and smoke-tested; re-test after rotating keys or changing deployment. |
 | ML Kit OCR / barcode on real frames | Emulator camera returns nothing useful; needs physical device + real text/barcodes. |
 | TTS on Android | Behavior varies by OEM TTS engine; verify on target device. |
 | iOS build | Needs Xcode + provisioning profile. |

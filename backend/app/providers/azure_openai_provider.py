@@ -16,7 +16,7 @@ import os
 
 import httpx
 
-from . import VisionProvider
+from . import VisionProvider, VisionProviderError
 
 _TASK_PROMPTS: dict[str, str] = {
     "scene": (
@@ -37,10 +37,10 @@ class AzureOpenAIProvider(VisionProvider):
 
     def __init__(self) -> None:
         # Fail fast at construction time so misconfiguration surfaces immediately.
-        self._endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
-        self._key = os.getenv("AZURE_OPENAI_KEY") or os.environ["AZURE_OPENAI_API_KEY"]
-        self._deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini")
-        self._api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
+        self._endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].strip().rstrip("/")
+        self._key = (os.getenv("AZURE_OPENAI_KEY") or os.environ["AZURE_OPENAI_API_KEY"]).strip()
+        self._deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini").strip()
+        self._api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview").strip()
 
     async def describe(
         self,
@@ -73,15 +73,24 @@ class AzureOpenAIProvider(VisionProvider):
                     ],
                 }
             ],
-            "max_tokens": 150,
+            "max_completion_tokens": 150,
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(
-                url,
-                json=payload,
-                headers={"api-key": self._key, "Content-Type": "application/json"},
-            )
-            r.raise_for_status()
-            data = r.json()
-            return data["choices"][0]["message"]["content"].strip()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(
+                    url,
+                    json=payload,
+                    headers={"api-key": self._key, "Content-Type": "application/json"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                return data["choices"][0]["message"]["content"].strip()
+        except httpx.HTTPStatusError as exc:
+            raise VisionProviderError(
+                f"Azure OpenAI request failed with HTTP {exc.response.status_code}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise VisionProviderError("Azure OpenAI request failed") from exc
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise VisionProviderError("Azure OpenAI response was malformed") from exc

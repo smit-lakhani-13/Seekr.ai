@@ -14,6 +14,10 @@ class VisionProvider(ABC):
     ) -> str: ...
 
 
+class VisionProviderError(RuntimeError):
+    """Sanitized provider failure safe to expose as an upstream error."""
+
+
 def get_provider() -> VisionProvider:
     """Select provider via VISION_PROVIDER env var (default: mock)."""
     import warnings  # noqa: PLC0415
