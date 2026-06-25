@@ -1,25 +1,26 @@
 name: seekr_companion_demo
 description: An accessibility-first Flutter prototype that simulates a companion app for an assistive wearable. Built to illustrate architecture, accessibility, and real-time audio handling — not a reproduction of any product.
-publish_to: 'none'
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  get: ^4.6.6          # state management + DI + routing (matches my production stack)
-  flutter_tts: ^4.0.0  # text-to-speech; supports web/iOS/Android/macOS/Windows
-  connectivity_plus: ^6.0.0  # detect connectivity state (wifi/cellular/none); binding stays native
-  http: ^1.2.0               # cloud API calls (Tier 2); plain http is sufficient here
+  get: ^4.6.6 # state management + DI + routing (matches my production stack)
+  flutter_tts: ^4.0.0 # text-to-speech; supports web/iOS/Android/macOS/Windows
+  connectivity_plus: ^6.0.0 # detect connectivity state (wifi/cellular/none); binding stays native
+  http: ^1.2.0 # cloud API calls (Tier 2); plain http is sufficient here
   camera: ^0.11.0            # phone camera as stand-in for wearable (Phase 2)
+  camera_android: ^0.10.10   # explicitly use Camera2 implementation to resolve orientation crashes
   flutter_image_compress: ^2.3.0  # downscale + JPEG compress frames before cloud upload
-  permission_handler: ^11.3.0     # runtime CAMERA permission request
-  path_provider: ^2.1.0               # temp file for ML Kit JPEG input
-  google_mlkit_text_recognition: ^0.14.0  # Tier-1 OCR (on-device, offline, free)
-  google_mlkit_image_labeling: ^0.13.0    # Tier-1 scene/product labeling
-  google_mlkit_barcode_scanning: ^0.13.0  # Tier-1 product barcode scan
+  permission_handler: ^11.3.0 # runtime CAMERA permission request
+  path_provider: ^2.1.0 # temp file for ML Kit JPEG input
+  google_mlkit_text_recognition: ^0.14.0 # Tier-1 OCR (on-device, offline, free)
+  google_mlkit_image_labeling: ^0.13.0 # Tier-1 scene/product labeling
+  google_mlkit_barcode_scanning: ^0.13.0 # Tier-1 product barcode scan
 
 dev_dependencies:
   flutter_test:
