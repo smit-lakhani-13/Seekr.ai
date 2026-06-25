@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- minSdk=24 (Android 7.0) declared in app/build.gradle.
+         WifiNetworkSpecifier (used for wearable AP) requires Android 10+ (SDK 29).
+         The Dart side degrades gracefully on API 24–28 via the UNSUPPORTED error code. -->
     <application
         android:label="Seekr Companion"
         android:name="${applicationName}"

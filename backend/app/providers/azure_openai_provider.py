@@ -1,11 +1,11 @@
 """
-Azure OpenAI GPT-4o-vision provider.
+Azure OpenAI vision provider.
 
 Required env vars (TODO(human): set before enabling):
   AZURE_OPENAI_ENDPOINT  — e.g. https://your-resource.openai.azure.com
-  AZURE_OPENAI_KEY       — your Azure API key
-  AZURE_OPENAI_DEPLOYMENT — deployment name (default: gpt-4o)
-  AZURE_OPENAI_API_VERSION — API version (default: 2024-02-01)
+  AZURE_OPENAI_KEY or AZURE_OPENAI_API_KEY — your Azure API key
+  AZURE_OPENAI_DEPLOYMENT — deployment name (default: gpt-5.4-mini)
+  AZURE_OPENAI_API_VERSION — API version (default: 2024-05-01-preview)
 
 Enable: set VISION_PROVIDER=azure_openai
 Security: image bytes are sent over TLS; never logged server-side.
@@ -37,10 +37,10 @@ class AzureOpenAIProvider(VisionProvider):
 
     def __init__(self) -> None:
         # Fail fast at construction time so misconfiguration surfaces immediately.
-        self._endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]  # TODO(human): set in env
-        self._key = os.environ["AZURE_OPENAI_KEY"]  # TODO(human): set in env
-        self._deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
-        self._api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
+        self._endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
+        self._key = os.getenv("AZURE_OPENAI_KEY") or os.environ["AZURE_OPENAI_API_KEY"]
+        self._deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini")
+        self._api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-05-01-preview")
 
     async def describe(
         self,

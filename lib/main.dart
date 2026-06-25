@@ -27,7 +27,8 @@ void bootstrap(Flavor flavor) {
 
   Get.put<DeviceService>(DeviceService());
   Get.put<TtsService>(FlutterTtsService());
-  Get.put<ConnectivityService>(ConnectivityServiceImpl());
+  Get.put<ConnectivityService>(
+      kIsWeb ? NoopConnectivityService() : ConnectivityServiceImpl());
   // Web uses SimulatedImageSource (no platform channels); Android uses real camera.
   Get.put<DeviceImageSource>(
       kIsWeb ? SimulatedImageSource() : PhoneCameraSource());

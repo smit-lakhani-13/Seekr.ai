@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:camera/camera.dart';
 import 'package:get/get.dart';
 
 import '../data/device_image_source.dart';
@@ -32,6 +33,8 @@ class SeekrController extends GetxController {
   final RxList<String> spokenLog = <String>[].obs;
   final RxDouble obstacleThreshold = 2.0.obs;
   final RxBool isCapturing = false.obs;
+  // Reactive camera controller — set after source.initialize() so _CameraPreviewCard rebuilds.
+  final Rx<CameraController?> cameraController = Rx<CameraController?>(null);
 
   // ----- internals -----
   StreamSubscription<double>? _distanceSub;
@@ -140,6 +143,10 @@ class SeekrController extends GetxController {
           return;
         }
       }
+      // Notify _CameraPreviewCard to show live preview after first init.
+      if (cameraController.value == null) {
+        cameraController.value = source.cameraController;
+      }
       final bytes = await source.captureFrame();
       final router = Get.find<VisionRouter>();
       final description = await router.route(
@@ -168,13 +175,15 @@ class SeekrController extends GetxController {
     _distanceSub?.cancel();
     _connSub?.cancel();
     _descriptionTimer?.cancel();
+    cameraController.value = null;
     _device.dispose();
-    // Close platform resources; fire-and-forget since GetX onClose is void.
+    // Fire-and-forget async dispose of platform resources.
+    // .ignore() suppresses unhandled future errors; try/catch handles Get.find miss.
     try {
-      unawaited(Get.find<DeviceImageSource>().dispose());
+      Get.find<DeviceImageSource>().dispose().ignore();
     } catch (_) {}
     try {
-      unawaited(Get.find<LocalVisionService>().dispose());
+      Get.find<LocalVisionService>().dispose().ignore();
     } catch (_) {}
     try {
       Get.find<ConnectivityService>().dispose();

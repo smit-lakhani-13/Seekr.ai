@@ -39,6 +39,8 @@ class _MockConn implements ConnectivityService {
   @override
   Future<void> connectToDeviceAP({required String ssid, String? bssid}) async {}
   @override
+  Future<void> disconnectFromDeviceAP() async {}
+  @override
   Future<void> requestCellular() async {}
   @override
   Future<T> withRetry<T>(Future<T> Function() call,

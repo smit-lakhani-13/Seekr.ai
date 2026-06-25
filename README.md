@@ -50,6 +50,9 @@ flutter pub get
 flutter run -d chrome               # web (TTS via browser speech engine)
 flutter run                          # pick Android/iOS device
 flutter build apk --debug            # debug APK → build/app/outputs/flutter-apk/app-debug.apk
+flutter build apk --release \
+  --target=lib/main_prod.dart \
+  --dart-define=BACKEND_URL=https://your-cloud-run-url  # release APK
 ```
 
 **Flavors** (separate entry points, real backend URL via dart-define):
@@ -87,12 +90,13 @@ curl -X POST http://localhost:8000/describe \
 # → {"text":"[Mock] Scene: ...","provider":"mock"}
 ```
 
-**Set real cloud keys to use GPT-4o-vision:**
+**Set real cloud keys to use your Azure OpenAI vision deployment:**
 ```bash
 export VISION_PROVIDER=azure_openai
-export AZURE_OPENAI_ENDPOINT=https://YOUR_RESOURCE.openai.azure.com   # TODO(human)
-export AZURE_OPENAI_KEY=YOUR_KEY                                        # TODO(human)
-export AZURE_OPENAI_DEPLOYMENT=gpt-4o                                   # TODO(human)
+export AZURE_OPENAI_ENDPOINT=https://YOUR_RESOURCE.openai.azure.com
+export AZURE_OPENAI_API_KEY=<your-key>
+export AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
+export AZURE_OPENAI_API_VERSION=2024-05-01-preview
 uv run uvicorn app.main:app --reload
 ```
 
@@ -170,7 +174,7 @@ These cannot be automated — flag them as manual-only during demo:
 | What | Why |
 |------|-----|
 | Dual-network (device WiFi + cellular simultaneously) | Needs physical Android with SIM + separate no-internet WiFi. `WifiNetworkSpecifier` is Android 10+. |
-| GPT-4o-vision end-to-end | Needs `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_KEY` set. |
+| Azure OpenAI vision end-to-end | Needs `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY` set. |
 | ML Kit OCR / barcode on real frames | Emulator camera returns nothing useful; needs physical device + real text/barcodes. |
 | TTS on Android | Behavior varies by OEM TTS engine; verify on target device. |
 | iOS build | Needs Xcode + provisioning profile. |

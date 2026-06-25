@@ -4,7 +4,6 @@ import 'package:flutter/semantics.dart';
 import 'package:get/get.dart';
 
 import '../controllers/seekr_controller.dart';
-import '../data/device_image_source.dart';
 import '../domain/models.dart';
 
 /// Accessibility-first UI:
@@ -199,7 +198,7 @@ class _ModeGrid extends StatelessWidget {
                           Text(
                             m.description,
                             style: TextStyle(
-                                fontSize: 10, color: cs.onSurfaceVariant),
+                                fontSize: 11, color: cs.onSurfaceVariant),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -278,35 +277,36 @@ class _CameraPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Registered in bootstrap() before the widget tree is built.
-    final source = Get.find<DeviceImageSource>();
-    final controller = source.cameraController;
-
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Preview area — 16:9, max 220 px tall.
+          // Reactive preview: rebuilds when SeekrController.cameraController is set
+          // after the first captureAndDescribe() call initializes the camera source.
           SizedBox(
             height: 200,
-            child: controller != null && controller.value.isInitialized
-                ? Semantics(
-                    label: 'Camera preview',
-                    child: CameraPreview(controller),
-                  )
-                : const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.camera_alt, size: 48),
-                        SizedBox(height: 8),
-                        Text('Camera preview'),
-                        Text('Tap Describe to initialize',
-                            style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
+            child: Obx(() {
+              final ctrl = c.cameraController.value;
+              if (ctrl != null && ctrl.value.isInitialized) {
+                return Semantics(
+                  label: 'Camera preview',
+                  child: CameraPreview(ctrl),
+                );
+              }
+              return const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.camera_alt, size: 48),
+                    SizedBox(height: 8),
+                    Text('Camera preview'),
+                    Text('Tap Describe to initialize',
+                        style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              );
+            }),
           ),
           // Describe trigger button — large, accessible, full width.
           Obx(() {

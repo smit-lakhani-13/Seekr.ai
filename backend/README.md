@@ -31,9 +31,9 @@ Tasks: `scene` | `ocr` | `vqa` | `product`. For `vqa`, also pass `-F "question=W
 |-----|---------|---------|
 | `VISION_PROVIDER` | `mock` | `mock` or `azure_openai` |
 | `AZURE_OPENAI_ENDPOINT` | — | TODO(human): set to your Azure resource URL |
-| `AZURE_OPENAI_KEY` | — | TODO(human): set to your Azure API key |
-| `AZURE_OPENAI_DEPLOYMENT` | `gpt-4o` | Deployment name |
-| `AZURE_OPENAI_API_VERSION` | `2024-02-01` | API version |
+| `AZURE_OPENAI_API_KEY` | — | TODO(human): set to your Azure API key. `AZURE_OPENAI_KEY` is also accepted for compatibility. |
+| `AZURE_OPENAI_DEPLOYMENT` | `gpt-5.4-mini` | Deployment name |
+| `AZURE_OPENAI_API_VERSION` | `2024-05-01-preview` | API version |
 
 ## Security notes
 

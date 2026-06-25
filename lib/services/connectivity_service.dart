@@ -15,6 +15,9 @@ abstract class ConnectivityService {
   /// Connect to the wearable's local AP (Android 10+ only; no-op otherwise).
   Future<void> connectToDeviceAP({required String ssid, String? bssid});
 
+  /// Release the wearable AP connection held by WifiNetworkSpecifier.
+  Future<void> disconnectFromDeviceAP();
+
   /// Ensure a cellular network is held for cloud calls (Android).
   Future<void> requestCellular();
 
@@ -83,6 +86,15 @@ class ConnectivityServiceImpl implements ConnectivityService {
         return; // Android <10 or iOS: degrade gracefully
       }
       rethrow;
+    }
+  }
+
+  @override
+  Future<void> disconnectFromDeviceAP() async {
+    try {
+      await _networkChannel.invokeMethod<void>('releaseDeviceAP');
+    } on PlatformException {
+      // No-op on non-Android or if AP was never connected.
     }
   }
 
@@ -160,6 +172,8 @@ class NoopConnectivityService implements ConnectivityService {
   bool get isOnline => _online;
   @override
   Future<void> connectToDeviceAP({required String ssid, String? bssid}) async {}
+  @override
+  Future<void> disconnectFromDeviceAP() async {}
   @override
   Future<void> requestCellular() async {}
   @override
