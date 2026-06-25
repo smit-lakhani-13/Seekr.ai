@@ -10,6 +10,7 @@ import '../data/device_service.dart';
 import '../services/vision_router.dart';
 import '../domain/models.dart';
 import '../services/audio_queue.dart';
+import '../services/live_speech_policy.dart';
 import '../services/tts_service.dart';
 
 /// Orchestrates the whole experience and exposes reactive state to the UI.
@@ -41,7 +42,7 @@ class SeekrController extends GetxController {
   StreamSubscription<double>? _distanceSub;
   StreamSubscription<DeviceConnectionState>? _connSub;
   DateTime? _lastObstacleAlert;
-  String? _lastLiveText;
+  final LiveSpeechPolicy _liveSpeechPolicy = LiveSpeechPolicy();
 
   static const Duration _cooldown = Duration(seconds: 3);
 
@@ -63,7 +64,7 @@ class SeekrController extends GetxController {
   void selectMode(SeekrMode mode) {
     activeMode.value = mode;
     stopSpeaking();
-    _lastLiveText = null;
+    _liveSpeechPolicy.reset();
     _announce(
         '${mode.label} activated. ${mode.description}', AudioPriority.normal);
   }
@@ -81,7 +82,7 @@ class SeekrController extends GetxController {
   void stopMode() {
     final stoppedMode = activeMode.value;
     activeMode.value = SeekrMode.none;
-    _lastLiveText = null;
+    _liveSpeechPolicy.reset();
     stopSpeaking();
     if (stoppedMode != SeekrMode.none) {
       spokenLog.insert(0, '${stoppedMode.label} stopped.');
@@ -91,22 +92,29 @@ class SeekrController extends GetxController {
 
   void stopSpeaking() {
     _audio.clear();
+    _liveSpeechPolicy.reset();
     nowSpeaking.value = null;
   }
 
   /// Called by the full-screen camera view before starting its live loop.
   void prepareLiveMode(SeekrMode mode) {
     activeMode.value = mode;
-    _lastLiveText = null;
+    _liveSpeechPolicy.reset();
     stopSpeaking();
   }
 
-  /// Speak live-view text only when it changes (dedup prevents repeated TTS).
+  /// Speak live text only when the scene meaningfully changes.
+  ///
+  /// Live camera audio is latest-result-wins: the newest useful description
+  /// replaces queued/current normal speech, while safety alerts keep their
+  /// separate interrupt path.
   bool announceLive(String text) {
-    final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (normalized.isEmpty || normalized == _lastLiveText) return false;
-    _lastLiveText = normalized;
-    _announce(text, AudioPriority.normal);
+    final decision = _liveSpeechPolicy.decide(text);
+    if (!decision.shouldSpeak) return false;
+
+    _audio.replace(Utterance(text, AudioPriority.normal));
+    spokenLog.insert(0, text);
+    if (spokenLog.length > 20) spokenLog.removeLast();
     return true;
   }
 
@@ -167,7 +175,7 @@ class SeekrController extends GetxController {
   /// full-screen view responsive and avoids sending continuous video frames.
   Future<String> describeLiveFrame(SeekrMode mode) async {
     final effectiveMode =
-        mode == SeekrMode.none ? SeekrMode.sceneDetection : mode;
+        mode == SeekrMode.none ? SeekrMode.textRecognition : mode;
 
     final source = Get.find<DeviceImageSource>();
     if (!source.isReady) {

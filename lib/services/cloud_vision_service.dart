@@ -9,6 +9,21 @@ import 'connectivity_service.dart';
 abstract class CloudVisionService {
   Future<String> describe(List<int> imageBytes, SeekrMode mode,
       {String? question});
+  Future<CloudHealth> health();
+}
+
+class CloudHealth {
+  const CloudHealth({
+    required this.reachable,
+    required this.status,
+    this.provider,
+    this.message,
+  });
+
+  final bool reachable;
+  final String status;
+  final String? provider;
+  final String? message;
 }
 
 // ── HTTP implementation (calls FastAPI backend) ───────────────────────────────
@@ -53,6 +68,34 @@ class HttpCloudVisionService implements CloudVisionService {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data['text'] as String;
       });
+
+  @override
+  Future<CloudHealth> health() async {
+    try {
+      final response = await http
+          .get(Uri.parse('${AppConfig.backendUrl}/health'))
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode != 200) {
+        return CloudHealth(
+          reachable: false,
+          status: 'HTTP ${response.statusCode}',
+          message: 'Backend health endpoint returned an error.',
+        );
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return CloudHealth(
+        reachable: data['status'] == 'ok',
+        status: data['status']?.toString() ?? 'unknown',
+        provider: data['provider']?.toString(),
+      );
+    } catch (e) {
+      return CloudHealth(
+        reachable: false,
+        status: 'unreachable',
+        message: e.toString(),
+      );
+    }
+  }
 }
 
 // ── No-op (tests) ─────────────────────────────────────────────────────────────
@@ -62,4 +105,11 @@ class NoopCloudVisionService implements CloudVisionService {
   Future<String> describe(List<int> imageBytes, SeekrMode mode,
           {String? question}) async =>
       'Cloud description unavailable in this build.';
+
+  @override
+  Future<CloudHealth> health() async => const CloudHealth(
+        reachable: false,
+        status: 'not configured',
+        message: 'No cloud service registered.',
+      );
 }

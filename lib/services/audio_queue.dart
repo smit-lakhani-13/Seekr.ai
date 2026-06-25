@@ -30,6 +30,19 @@ class AudioQueue {
     _startDraining();
   }
 
+  /// Replace all queued/current normal speech with the latest live result.
+  ///
+  /// This is intentionally separate from [enqueue]: live camera descriptions
+  /// are a latest-result-wins stream, not a backlog. Safety alerts should still
+  /// use [enqueue] with [AudioPriority.safety] so they jump the line.
+  void replace(Utterance u) {
+    _queue
+      ..clear()
+      ..add(u);
+    _tts.stop();
+    _startDraining();
+  }
+
   Future<void> _startDraining() async {
     if (_draining) return; // only one loop ever runs → no overlap / no reorder
     _draining = true;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:seekr_companion_demo/domain/models.dart';
 import 'package:seekr_companion_demo/services/tts_service.dart';
@@ -18,6 +20,32 @@ class MockTtsService implements TtsService {
   @override
   Future<void> stop() async {
     wasStopped = true;
+  }
+}
+
+class BlockingTtsService implements TtsService {
+  final List<String> spoken = [];
+  int stopCount = 0;
+  Completer<void>? _current;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<void> speak(String text) {
+    spoken.add(text);
+    _current = Completer<void>();
+    return _current!.future;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount++;
+    _current?.complete();
+  }
+
+  void finishCurrent() {
+    _current?.complete();
   }
 }
 
@@ -64,6 +92,24 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(mockTts.wasStopped, isTrue);
+    });
+
+    test('replace clears stale normal speech and speaks latest result',
+        () async {
+      final tts = BlockingTtsService();
+      final queue = AudioQueue(tts);
+
+      queue.enqueue(const Utterance('alarm screen', AudioPriority.normal));
+      await Future<void>.delayed(Duration.zero);
+      queue
+          .enqueue(const Utterance('queued stale alarm', AudioPriority.normal));
+      queue.replace(const Utterance('desk and monitor', AudioPriority.normal));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(tts.stopCount, 1);
+      expect(tts.spoken, ['alarm screen', 'desk and monitor']);
+
+      tts.finishCurrent();
     });
   });
 }

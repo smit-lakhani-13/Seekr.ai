@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import '../controllers/seekr_controller.dart';
 import '../data/device_image_source.dart';
 import '../domain/models.dart';
+import '../services/live_frame_gate.dart';
 import 'widgets/camera_preview_box.dart';
 
 class CameraLiveView extends StatefulWidget {
@@ -33,6 +34,7 @@ class _CameraLiveViewState extends State<CameraLiveView> {
   bool _torchOn = false;
   bool _released = false;
   String _status = 'Opening camera...';
+  final LiveFrameGate _frameGate = LiveFrameGate();
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _CameraLiveViewState extends State<CameraLiveView> {
     _controller = Get.find<SeekrController>();
     _source = Get.find<DeviceImageSource>();
     _mode = widget.initialMode == SeekrMode.none
-        ? SeekrMode.sceneDetection
+        ? SeekrMode.textRecognition
         : widget.initialMode;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_start());
@@ -72,14 +74,18 @@ class _CameraLiveViewState extends State<CameraLiveView> {
   }
 
   Future<void> _analyzeFrame() async {
-    if (_processing || !mounted) return;
+    if (_processing || !mounted || _released) return;
+    final ticket = _frameGate.begin();
     _processing = true;
     try {
       final description =
           await _controller.describeLiveFrame(_mode).timeout(_captureTimeout);
-      if (!mounted) return;
+      if (!mounted || _released || !_frameGate.tryApply(ticket)) return;
       setState(() => _status = description);
-      _controller.announceLive(description);
+      // Obstacle alerts are driven by _onDistance (safety priority + cooldown).
+      if (_mode != SeekrMode.depthObstacle) {
+        _controller.announceLive(description);
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _status = 'Camera is still adjusting...');
@@ -111,7 +117,9 @@ class _CameraLiveViewState extends State<CameraLiveView> {
   Future<void> _releaseCamera() async {
     if (_released) return;
     _released = true;
+    _frameGate.reset();
     _timer?.cancel();
+    _timer = null;
     _controller.stopSpeaking();
     _controller.cameraController.value = null;
     await _source.setTorchMode(false);
@@ -121,7 +129,9 @@ class _CameraLiveViewState extends State<CameraLiveView> {
   void _releaseCameraSync() {
     if (_released) return;
     _released = true;
+    _frameGate.reset();
     _timer?.cancel();
+    _timer = null;
     _controller.stopSpeaking();
     _controller.cameraController.value = null;
     _source.setTorchMode(false).ignore();

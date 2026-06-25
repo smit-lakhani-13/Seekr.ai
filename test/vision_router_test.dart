@@ -27,6 +27,13 @@ class _MockCloud implements CloudVisionService {
     if (throws) throw Exception('cloud error');
     return result!;
   }
+
+  @override
+  Future<CloudHealth> health() async => const CloudHealth(
+        reachable: true,
+        status: 'ok',
+        provider: 'mock',
+      );
 }
 
 class _MockConn implements ConnectivityService {

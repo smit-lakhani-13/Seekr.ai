@@ -1,9 +1,14 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:get/get.dart';
 
+import '../core/app_config.dart';
 import '../controllers/seekr_controller.dart';
 import '../domain/models.dart';
+import '../services/cloud_vision_service.dart';
 import 'camera_live_view.dart';
 import 'widgets/camera_preview_box.dart';
 
@@ -38,6 +43,8 @@ class HomeView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _ConnectionCard(c: c),
+              const SizedBox(height: 16),
+              const _NetworkArchCard(),
               const SizedBox(height: 16),
               _CameraPreviewCard(c: c),
               const SizedBox(height: 16),
@@ -318,7 +325,7 @@ class _CameraPreviewCard extends StatelessWidget {
 
   void _openLiveCamera() {
     final mode = c.activeMode.value == SeekrMode.none
-        ? SeekrMode.sceneDetection
+        ? SeekrMode.textRecognition
         : c.activeMode.value;
     Get.to<void>(
       () => CameraLiveView(initialMode: mode),
@@ -386,6 +393,272 @@ class _CameraPreviewCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Network Pipeline card ────────────────────────────────────────────────────
+
+/// Shows frame source + cloud route in real time — demonstrates the dual-network
+/// solution (WifiNetworkSpecifier for device AP + per-socket cellular binding).
+class _NetworkArchCard extends StatefulWidget {
+  const _NetworkArchCard();
+
+  @override
+  State<_NetworkArchCard> createState() => _NetworkArchCardState();
+}
+
+class _NetworkArchCardState extends State<_NetworkArchCard> {
+  List<ConnectivityResult> _types = [];
+  StreamSubscription<List<ConnectivityResult>>? _sub;
+  Timer? _healthTimer;
+  CloudHealth? _health;
+  bool _checkingHealth = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _refreshHealth();
+    _healthTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshHealth(),
+    );
+    try {
+      _sub = Connectivity().onConnectivityChanged.listen(
+        (types) {
+          if (mounted) setState(() => _types = types);
+        },
+        onError: (_) {},
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _load() async {
+    try {
+      final types = await Connectivity().checkConnectivity();
+      if (mounted) setState(() => _types = types);
+    } catch (_) {}
+  }
+
+  Future<void> _refreshHealth() async {
+    if (_checkingHealth) return;
+    _checkingHealth = true;
+    try {
+      final health = await Get.find<CloudVisionService>().health();
+      if (mounted) setState(() => _health = health);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _health = const CloudHealth(
+            reachable: false,
+            status: 'unavailable',
+            message: 'Cloud service is not registered.',
+          );
+        });
+      }
+    } finally {
+      _checkingHealth = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _healthTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showArchDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Dual-Network Architecture'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'The Seekr wearable creates its own local WiFi AP with no internet. '
+            'The phone connects to receive camera frames.\n\n'
+            'Problem: Android routes all traffic through the default network. '
+            'If the device WiFi has no internet, cloud AI calls fail.\n\n'
+            'Solution implemented here:\n'
+            '• WifiNetworkSpecifier (Android 10+) makes the device AP '
+            'app-scoped and local-only — never becomes the default route.\n'
+            '• A separate cellular Network is held via ConnectivityManager. '
+            'Cloud Tier-2 calls bind to this socket directly.\n'
+            '• Per-socket binding (not bindProcessToNetwork) keeps both '
+            'connections live simultaneously.\n\n'
+            'Live camera mode stays on-device. Cloud calls send one compressed '
+            'snapshot only when explicitly triggered.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final hasCellular = _types.contains(ConnectivityResult.mobile);
+    final hasWifi = _types.contains(ConnectivityResult.wifi);
+    final health = _health;
+    final backendValue = health == null
+        ? 'Checking...'
+        : health.reachable
+            ? 'Reachable'
+            : 'Unreachable';
+    final backendDetail = health == null
+        ? AppConfig.backendUrl
+        : health.reachable
+            ? 'Provider: ${health.provider ?? 'unknown'}'
+            : '${health.status} — Tier-1 remains available';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.device_hub_rounded, size: 18, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Network Pipeline',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline_rounded, size: 18),
+                  tooltip: 'How dual-network works',
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => _showArchDialog(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const _NetRow(
+              icon: Icons.camera_alt_rounded,
+              label: 'Frame source',
+              value: 'Phone Camera (demo)',
+              detail: 'Production: Seekr device → local WiFi AP',
+              color: Color(0xFF2196F3),
+            ),
+            const SizedBox(height: 6),
+            _NetRow(
+              icon: Icons.cloud_rounded,
+              label: 'Cloud AI',
+              value: hasCellular
+                  ? 'Mobile data'
+                  : hasWifi
+                      ? 'WiFi'
+                      : 'Offline',
+              detail: hasCellular
+                  ? 'Bound to cellular socket — bypasses device WiFi'
+                  : hasWifi
+                      ? 'Using WiFi (no cellular detected)'
+                      : 'No internet — Tier-1 only',
+              color: hasCellular
+                  ? const Color(0xFF4CAF50)
+                  : hasWifi
+                      ? const Color(0xFFFF9800)
+                      : cs.error,
+            ),
+            const SizedBox(height: 6),
+            _NetRow(
+              icon: Icons.health_and_safety_rounded,
+              label: 'Backend',
+              value: backendValue,
+              detail: backendDetail,
+              color: health?.reachable == true
+                  ? const Color(0xFF4CAF50)
+                  : health == null
+                      ? cs.primary
+                      : cs.error,
+            ),
+            const SizedBox(height: 6),
+            const _NetRow(
+              icon: Icons.lock_clock_rounded,
+              label: 'Cloud policy',
+              value: 'Triggered snapshots only',
+              detail: 'No continuous frame streaming to cloud',
+              color: Color(0xFF607D8B),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NetRow extends StatelessWidget {
+  const _NetRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 14, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 4,
+                children: [
+                  Text(
+                    '$label:',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+              Text(
+                detail,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

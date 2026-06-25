@@ -132,11 +132,23 @@ void main() {
     await tester.tap(find.text('Describe'));
     await tester.pumpAndSettle(const Duration(seconds: 1));
 
-    expect(find.text('Scene Detection'), findsOneWidget);
+    expect(find.text('Text Recognition'), findsOneWidget);
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.close_rounded));
     await tester.pumpAndSettle(const Duration(seconds: 1));
+  });
+
+  testWidgets('architecture network status panel renders', (tester) async {
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('Network Pipeline'), findsOneWidget);
+    expect(find.text('Frame source:'), findsOneWidget);
+    expect(find.text('Phone Camera (demo)'), findsOneWidget);
+    expect(find.text('Backend:'), findsOneWidget);
+    expect(find.text('Cloud policy:'), findsOneWidget);
   });
 
   testWidgets('no layout overflow on 320x568 small phone', (tester) async {

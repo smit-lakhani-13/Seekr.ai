@@ -11,7 +11,8 @@ _MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB hard cap; phone camera source targets
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    provider = get_provider()
+    return {"status": "ok", "provider": provider.name}
 
 
 @app.post("/describe", response_model=DescribeResponse)

@@ -19,7 +19,7 @@ abstract class LocalVisionService {
 class MlKitLocalVisionService implements LocalVisionService {
   final _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
   final _labeler =
-      ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.7));
+      ImageLabeler(options: ImageLabelerOptions(confidenceThreshold: 0.5));
   final _barcodeScanner = BarcodeScanner();
 
   /// Write bytes to a temp file; ML Kit works reliably with file paths for JPEG.
@@ -51,27 +51,61 @@ class MlKitLocalVisionService implements LocalVisionService {
 
   Future<String?> _readText(InputImage img) async {
     final result = await _textRecognizer.processImage(img);
-    if (result.text.trim().isEmpty) return null;
-    return 'Text reads: ${result.text.replaceAll('\n', '. ')}';
+    final text = result.text.trim();
+    if (text.isEmpty) return null;
+    // First 2 non-empty lines, max 140 chars — keeps TTS brief and stable.
+    final lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .take(2)
+        .join('. ');
+    final summary = lines.length > 140
+        ? '${lines.substring(0, 140).trimRight()}...'
+        : lines;
+    return 'I can see text: $summary';
   }
 
+  // ML Kit frequently misclassifies consumer electronics as these — blocklist them.
+  static const _labelBlocklist = {
+    'musical instrument',
+    'string instrument',
+    'bowed string instrument',
+    'wind instrument',
+    'plucked string instruments',
+    'percussion instrument',
+    'musical keyboard',
+    'keyboard instrument',
+  };
+
   Future<String?> _labelScene(InputImage img) async {
+    // Text is more specific than generic labels — try OCR first.
+    final textResult = await _readText(img);
+    if (textResult != null) return textResult;
+
     final labels = await _labeler.processImage(img);
     if (labels.isEmpty) return null;
-    final top = labels.take(3).map((l) => l.label).join(', ');
-    return 'Scene contains: $top';
+    final names = labels
+        .take(5)
+        .map((l) => l.label.toLowerCase())
+        .where((l) => l.length > 3)
+        .where((l) => !_labelBlocklist.contains(l))
+        .take(3)
+        .toList();
+    if (names.isEmpty) return null;
+    return 'I can see: ${names.join(', ')}.';
   }
 
   Future<String?> _scanProduct(InputImage img) async {
     // Barcode first (precise); fall back to image labels.
     final barcodes = await _barcodeScanner.processImage(img);
     if (barcodes.isNotEmpty && barcodes.first.displayValue != null) {
-      return 'Barcode: ${barcodes.first.displayValue}';
+      return 'Product barcode detected: ${barcodes.first.displayValue}';
     }
     final labels = await _labeler.processImage(img);
     if (labels.isEmpty) return null;
     final top = labels.take(2).map((l) => l.label).join(', ');
-    return 'Looks like: $top';
+    return 'I can see product-like items: $top';
   }
 
   @override
