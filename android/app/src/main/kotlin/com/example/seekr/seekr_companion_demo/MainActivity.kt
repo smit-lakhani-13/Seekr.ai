@@ -5,104 +5,140 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.wifi.WifiNetworkSpecifier
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
-import java.util.Timer
-import java.util.TimerTask
 
 class MainActivity : FlutterActivity() {
     private val DEVICE_CHANNEL = "seekr/device"
-    private val DISTANCE_CHANNEL = "seekr/distance_stream"
+    private val NETWORK_CHANNEL = "seekr/network"
+    private val NETWORK_LOST_CHANNEL = "seekr/network_lost"
 
-    private var distanceTimer: Timer? = null
+    // ponytail: hold both Network objects for per-socket binding (not bindProcessToNetwork which is process-wide).
+    // Dart passes requests through the appropriate Network; device frames use wifiNetwork, cloud calls use cellularNetwork.
+    private var cellularNetwork: Network? = null
+    private var cellularCallback: ConnectivityManager.NetworkCallback? = null
+    private var networkLostSink: EventChannel.EventSink? = null
+
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
 
-        // MethodChannel
+        // ── Device channel: battery ──────────────────────────────────────────
         MethodChannel(engine.dartExecutor.binaryMessenger, DEVICE_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "getBatteryLevel" -> {
                         val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-                        val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                        result.success(level)
-                    }
-                    "bindToCellular" -> {
-                        bindProcessToCellularNetwork(result)
+                        result.success(bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
                     }
                     else -> result.notImplemented()
                 }
             }
 
-        // EventChannel
-        EventChannel(engine.dartExecutor.binaryMessenger, DISTANCE_CHANNEL)
+        // ── Network channel: device AP connect + cellular binding ──────────────
+        MethodChannel(engine.dartExecutor.binaryMessenger, NETWORK_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    // Connects to the wearable's local AP without changing the default internet route.
+                    // Uses WifiNetworkSpecifier (Android 10+) so the device WiFi is app-scoped and
+                    // cellular remains the default route for all other (cloud) traffic.
+                    "connectToDeviceAP" -> connectToDeviceAP(call.argument("ssid"), call.argument("bssid"), result)
+                    // Requests and holds a cellular Network object. After connectToDeviceAP claims the
+                    // device WiFi as a local-only network, cellular is already the default route.
+                    "requestCellularNetwork" -> requestCellularNetwork(result)
+                    "releaseCellularNetwork" -> {
+                        releaseCellularNetwork()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // ── Network lost event channel: Dart listens for cellular drop ─────────
+        EventChannel(engine.dartExecutor.binaryMessenger, NETWORK_LOST_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-                    startDistanceStreaming(events)
+                    networkLostSink = events
                 }
-
                 override fun onCancel(arguments: Any?) {
-                    stopDistanceStreaming()
+                    networkLostSink = null
                 }
             })
     }
 
-    private fun bindProcessToCellularNetwork(result: MethodChannel.Result) {
+    private fun connectToDeviceAP(ssid: String?, bssid: String?, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            // Android < 10: WifiNetworkSpecifier not available; Dart side degrades gracefully.
+            result.error("UNSUPPORTED", "WifiNetworkSpecifier requires Android 10+", null)
+            return
+        }
+        if (ssid == null) {
+            result.error("INVALID_ARG", "ssid required", null)
+            return
+        }
+
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
+        if (bssid != null) specifierBuilder.setBssid(android.net.MacAddress.fromString(bssid))
+
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .setNetworkSpecifier(specifierBuilder.build())
+            .build()
+
+        cm.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // ponytail: do NOT bindProcessToNetwork here — that would break cellular.
+                // Frame fetches go through network.openConnection(url) when Phase 2 lands.
+                mainHandler.post { result.success(true) }
+                cm.unregisterNetworkCallback(this)
+            }
+            override fun onUnavailable() {
+                mainHandler.post { result.error("UNAVAILABLE", "Device AP not found", null) }
+            }
+        })
+    }
+
+    private fun requestCellularNetwork(result: MethodChannel.Result) {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val request = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
 
-        cm.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
+        cellularCallback?.let { cm.unregisterNetworkCallback(it) }
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                super.onAvailable(network)
-                // bindProcessToNetwork requires API 23+ (Marshmallow).
-                // Our minSdk is 24 (Nougat), so this is always available.
-                val bound = cm.bindProcessToNetwork(network)
-                Handler(Looper.getMainLooper()).post {
-                    if (bound) {
-                        result.success(true)
-                    } else {
-                        result.error("BIND_FAILED", "Failed to bind process to network", null)
-                    }
-                }
-                cm.unregisterNetworkCallback(this)
+                cellularNetwork = network
+                mainHandler.post { result.success(true) }
             }
-
-            override fun onUnavailable() {
-                super.onUnavailable()
-                Handler(Looper.getMainLooper()).post {
-                    result.error("UNAVAILABLE", "Cellular network unavailable", null)
-                }
+            override fun onLost(network: Network) {
+                cellularNetwork = null
+                mainHandler.post { networkLostSink?.success("cellular_lost") }
             }
-        })
+        }
+        cellularCallback = callback
+        cm.requestNetwork(request, callback)
     }
 
-    private fun startDistanceStreaming(events: EventChannel.EventSink?) {
-        distanceTimer?.cancel()
-        distanceTimer = Timer()
-        var lastDistance = 4.0
-        distanceTimer?.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                val delta = (Math.random() - 0.5) * 1.6
-                lastDistance = (lastDistance + delta).coerceIn(0.4, 5.0)
-                val rounded = Math.round(lastDistance * 10.0) / 10.0
-                Handler(Looper.getMainLooper()).post {
-                    events?.success(rounded)
-                }
-            }
-        }, 0, 800)
+    private fun releaseCellularNetwork() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        cellularCallback?.let { cm.unregisterNetworkCallback(it) }
+        cellularCallback = null
+        cellularNetwork = null
     }
 
-    private fun stopDistanceStreaming() {
-        distanceTimer?.cancel()
-        distanceTimer = null
+    override fun onDestroy() {
+        releaseCellularNetwork()
+        super.onDestroy()
     }
 }

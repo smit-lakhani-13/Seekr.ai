@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:get/get.dart';
 
+import '../data/device_image_source.dart';
+import '../services/local_vision_service.dart';
 import '../data/device_service.dart';
+import '../services/vision_router.dart';
 import '../domain/models.dart';
 import '../services/audio_queue.dart';
 import '../services/tts_service.dart';
@@ -27,6 +30,7 @@ class SeekrController extends GetxController {
   final RxnString nowSpeaking = RxnString();
   final RxList<String> spokenLog = <String>[].obs;
   final RxDouble obstacleThreshold = 2.0.obs;
+  final RxBool isCapturing = false.obs;
 
   // ----- internals -----
   StreamSubscription<double>? _distanceSub;
@@ -57,7 +61,8 @@ class SeekrController extends GetxController {
     _audio.clear();
     nowSpeaking.value = null;
     _descriptionTimer?.cancel();
-    _announce('${mode.label} activated. ${mode.description}', AudioPriority.normal);
+    _announce(
+        '${mode.label} activated. ${mode.description}', AudioPriority.normal);
 
     final descriptive = mode == SeekrMode.sceneDetection ||
         mode == SeekrMode.textRecognition ||
@@ -119,6 +124,39 @@ class SeekrController extends GetxController {
     }
   }
 
+  /// Snapshot-on-trigger: initialize source if needed, capture one frame,
+  /// announce result. Phase 3 will replace the stub announcement with a real
+  /// cloud API call; interface is stable so nothing else changes.
+  Future<void> captureAndDescribe() async {
+    if (isCapturing.value) return; // debounce rapid taps
+    isCapturing.value = true;
+    try {
+      final source = Get.find<DeviceImageSource>();
+      if (!source.isReady) {
+        try {
+          await source.initialize();
+        } catch (e) {
+          _announce('Camera unavailable: $e', AudioPriority.safety);
+          return;
+        }
+      }
+      final bytes = await source.captureFrame();
+      final router = Get.find<VisionRouter>();
+      final description = await router.route(
+        bytes,
+        activeMode.value == SeekrMode.none
+            ? SeekrMode.sceneDetection
+            : activeMode.value,
+        triggered: true,
+      );
+      _announce(description, AudioPriority.normal);
+    } catch (e) {
+      _announce('Capture failed, please try again.', AudioPriority.safety);
+    } finally {
+      isCapturing.value = false;
+    }
+  }
+
   void _announce(String text, AudioPriority priority) {
     _audio.enqueue(Utterance(text, priority));
     spokenLog.insert(0, text);
@@ -131,6 +169,10 @@ class SeekrController extends GetxController {
     _connSub?.cancel();
     _descriptionTimer?.cancel();
     _device.dispose();
+    // Close ML Kit recognizers; fire-and-forget since onClose is void.
+    try {
+      unawaited(Get.find<LocalVisionService>().dispose());
+    } catch (_) {}
     super.onClose();
   }
 }

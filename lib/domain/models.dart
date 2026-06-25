@@ -1,6 +1,12 @@
 // Pure domain models — no Flutter imports, so they're trivially unit-testable.
 
-enum SeekrMode { none, textRecognition, sceneDetection, depthObstacle, supermarket }
+enum SeekrMode {
+  none,
+  textRecognition,
+  sceneDetection,
+  depthObstacle,
+  supermarket
+}
 
 extension SeekrModeX on SeekrMode {
   String get label {

@@ -33,7 +33,8 @@ void main() {
 
     test('description returns correct string', () {
       expect(SeekrMode.none.description, 'Select a mode to begin.');
-      expect(SeekrMode.depthObstacle.description, 'Warns about obstacles ahead.');
+      expect(
+          SeekrMode.depthObstacle.description, 'Warns about obstacles ahead.');
     });
   });
 
@@ -51,11 +52,13 @@ void main() {
       expect(mockTts.spoken, ['Hello', 'World']);
     });
 
-    test('Safety priority item interrupts current speaking and jumps the line', () async {
+    test('Safety priority item interrupts current speaking and jumps the line',
+        () async {
       final mockTts = MockTtsService();
       final queue = AudioQueue(mockTts);
 
-      queue.enqueue(const Utterance('Long scene description', AudioPriority.normal));
+      queue.enqueue(
+          const Utterance('Long scene description', AudioPriority.normal));
       queue.enqueue(const Utterance('Obstacle ahead!', AudioPriority.safety));
 
       await Future<void>.delayed(Duration.zero);

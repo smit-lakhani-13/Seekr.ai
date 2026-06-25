@@ -1,6 +1,6 @@
-# CLAUDE.md — Project Context for Claude Code
+# AGENTS.md — Project Context for Codex
 
-> Claude Code reads this file automatically. It is the standing context for this repo. Read it fully before doing anything. The separate kickoff prompt (`claude_code_kickoff_prompt.md`) contains the phased task list and build gates.
+> Codex reads this file automatically. It is the standing context for this repo. Read it fully before doing anything. The separate kickoff prompt (`claude_code_kickoff_prompt.md`) contains the phased task list and build gates.
 
 ---
 

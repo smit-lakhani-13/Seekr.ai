@@ -41,6 +41,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Seekr uses the camera to describe your surroundings and read text for accessibility.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Seekr does not record audio. This permission is required by the iOS camera framework.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

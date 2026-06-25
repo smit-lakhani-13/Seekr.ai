@@ -40,8 +40,7 @@ class DeviceService {
       final delta = (_rand.nextDouble() - 0.5) * 1.6;
       // .clamp() on a double returns `num`, so .toDouble() keeps the field typed.
       _lastDistance = (_lastDistance + delta).clamp(0.4, 5.0).toDouble();
-      _distanceController
-          .add(double.parse(_lastDistance.toStringAsFixed(1)));
+      _distanceController.add(double.parse(_lastDistance.toStringAsFixed(1)));
     });
   }
 

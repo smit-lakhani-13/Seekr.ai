@@ -1,71 +1,187 @@
 # Seekr Companion — Demo Prototype
 
-An **accessibility-first Flutter prototype** that simulates a companion app for an assistive wearable (the kind Seekr builds for low-vision and elderly users). It is **my own illustration of approach** — it simulates the device with a mock data stream — **not a reproduction of Seekr's product or IP**.
+An **accessibility-first Flutter + FastAPI prototype** for a companion app to an assistive wearable (the kind Seekr builds for low-vision and elderly users). It is my own illustration of approach — not a reproduction of Seekr's product or IP.
 
-Built to demonstrate, in a few minutes, the exact skills the role asks for: **Flutter + GetX, clean architecture, Flutter flavors, real-time data handling, an audio-priority engine, and rigorous accessibility.**
+Built to demonstrate: **Flutter + GetX, clean architecture, three-tier hybrid AI pipeline, ML Kit on-device inference, FastAPI backend, flavor system, real-time data handling, priority audio engine, and rigorous accessibility.**
 
 ---
 
-## ▶️ Run it (Chrome — easiest for a live screen-share)
+## Architecture: Three-Tier Hybrid
 
-You need Flutter installed (`flutter --version`; this was written against Flutter 3.x / Dart 3.x).
+```
+TIER 0 — WEARABLE (dumb + cheap)
+  Camera + WiFi + battery. Streams compressed frames to phone.
+  In this demo: phone camera acts as the stand-in device.
 
-```bash
-cd seekr_companion_demo
-flutter pub get
-flutter run -d chrome
+TIER 1 — PHONE, ON-DEVICE (ML Kit, offline, instant, free)
+  Latency-critical and continuous tasks:
+  ├── Obstacle/depth detection  → always runs here (never network-dependent)
+  ├── OCR / text recognition    → ML Kit text recognizer (local-first)
+  └── Barcode / product scan    → ML Kit barcode scanner (local-first)
+
+TIER 2 — CLOUD (FastAPI on GCP/Azure, on explicit trigger only)
+  Heavy, user-triggered tasks:
+  ├── Rich scene description    → GPT-4o-vision via Azure OpenAI
+  ├── Complex OCR fallback      → when ML Kit returns nothing
+  └── Product enrichment        → when barcode scan returns nothing
+  One compressed JPEG (<150 KB) sent per trigger. Never a continuous stream.
 ```
 
-That's it — no emulator or device needed. TTS speaks through the browser's speech engine in Chrome. You can also run on Android/iOS/macOS/Windows (`flutter run` and pick a device).
+**Routing rule:** `(task type, connectivity, explicit user trigger)` decides the tier.
+- Safety/continuous → Tier 1 always (never waits on network)
+- OCR/barcode → Tier 1 first; Tier 2 only if local returns nothing AND user triggered AND online
+- Scene description → Tier 2 when user triggered + online; Tier 1 fallback offline
+- No trigger → never uploads to cloud
 
-> **Test this BEFORE the interview.** If `flutter pub get` or the build fails on your machine, fix it now, not live. (If `flutter_tts` ever fails to initialise on your platform, open `lib/main.dart` and change `FlutterTtsService()` to `NoopTtsService()` — the app still runs and the on-screen "now speaking" log still demonstrates the full flow, just without audio.)
-
-### Using it
-1. Tap **Connect** → simulated pairing → distance readings start streaming.
-2. Tap **Depth & Obstacle** → when the simulated distance drops under 2 m you get a **spoken safety alert**, then a 3-second cooldown (no spam).
-3. Tap **Scene Detection / Text Recognition / Supermarket** → periodic spoken **descriptions**. If an obstacle alert fires while a description is speaking, the **alert interrupts** it (priority audio).
-4. Tap the **app-bar icon** to toggle **dark mode**.
-
----
-
-## 🎤 4-minute walkthrough script (what to say while sharing your screen)
-
-**Ask first:** *"I built a small prototype to show how I'd approach the companion app — it simulates the device with a mock stream, so it's my own illustration, not a copy of yours. Mind if I share my screen for a few minutes?"*
-
-1. **Architecture (60s).** "It's clean architecture on GetX — my production stack. Presentation is the views plus a GetX controller; domain has the models; data has the sources. The key decision: the device is a `DeviceService` behind an interface. Right now it's a simulated WiFi stream, but in production that's a real socket or an EventChannel — and crucially, **when you move from the clip-on to glasses, only that one class changes**. Everything else, including tests, stays put."
-2. **Real-time + the audio problem (90s).** "Distance readings stream in here. The interesting engineering problem for an assistive device is that you have one earpiece but multiple things wanting to speak at once. So I built a priority audio queue: safety alerts — like an obstacle — jump the line and interrupt the current description; normal descriptions queue behind. Watch: I'll switch to obstacle mode… there's the alert, and notice it won't repeat for three seconds — a cooldown so it never spams someone who can't see the screen." *(Demonstrate live.)*
-3. **Accessibility (60s).** "Because the user can't see the screen, every control has a Semantics label, the status cards are live regions, and mode changes fire a screen-reader announcement. Large text and high contrast are defaults, and dark mode is here because a real user in your App Store reviews asked for it — light backgrounds hurt some low-vision users." *(Toggle dark mode.)*
-4. **Stop and hand back (10s).** "That's the gist — happy to dig into any layer, or extend it live if you'd like."
-
-Then **stop talking** and let them drive. Don't over-run.
+**Why this beats pure on-device or pure cloud:**
+- Device stays small/long-battery (heavy compute on phone + cloud)
+- Safety latency preserved (obstacle detection never waits on network)
+- Privacy preserved (everyday detection stays on-device; cloud only on trigger, single frame, no retention)
+- Offline-resilient (core modes work with no internet)
 
 ---
 
-## 🧱 Architecture map
+## Run the Flutter App
+
+Requires Flutter ≥ 3.3.0 with Dart ≥ 3.0.
+
+```bash
+flutter pub get
+flutter run -d chrome               # web (TTS via browser speech engine)
+flutter run                          # pick Android/iOS device
+flutter build apk --debug            # debug APK → build/app/outputs/flutter-apk/app-debug.apk
+```
+
+**Flavors** (separate entry points, real backend URL via dart-define):
+```bash
+# dev (default, hits localhost backend)
+flutter run --target=lib/main_dev.dart
+
+# production (point at deployed backend)
+flutter build apk --release \
+  --target=lib/main_prod.dart \
+  --dart-define=BACKEND_URL=https://your-gcp-url
+```
+
+Default `BACKEND_URL` is `http://10.0.2.2:8000` (Android emulator → localhost).
+
+---
+
+## Run the Backend
+
+Requires Python ≥ 3.12 and [`uv`](https://docs.astral.sh/uv/).
+
+```bash
+cd backend
+uv sync                                      # install deps
+uv run uvicorn app.main:app --reload         # starts on http://localhost:8000
+
+# health check
+curl http://localhost:8000/health
+# → {"status":"ok"}
+
+# smoke test with mock provider (no keys needed)
+curl -X POST http://localhost:8000/describe \
+  -F "image=@/path/to/any.jpg" \
+  -F "task=scene"
+# → {"text":"[Mock] Scene: ...","provider":"mock"}
+```
+
+**Set real cloud keys to use GPT-4o-vision:**
+```bash
+export VISION_PROVIDER=azure_openai
+export AZURE_OPENAI_ENDPOINT=https://YOUR_RESOURCE.openai.azure.com   # TODO(human)
+export AZURE_OPENAI_KEY=YOUR_KEY                                        # TODO(human)
+export AZURE_OPENAI_DEPLOYMENT=gpt-4o                                   # TODO(human)
+uv run uvicorn app.main:app --reload
+```
+
+**Run backend tests:**
+```bash
+cd backend
+uv run pytest -v
+```
+
+---
+
+## Run All Tests
+
+```bash
+flutter test                    # unit + widget tests
+flutter analyze                 # lint clean
+dart format --set-exit-if-changed .
+```
+
+---
+
+## Architecture Map
 
 ```
 lib/
-  main.dart                     entry + DI (Get.put) + GetMaterialApp + themes
+  main.dart                   bootstrap(Flavor) DI + runApp
+  main_dev.dart               → bootstrap(Flavor.dev)
+  main_qa.dart                → bootstrap(Flavor.qa)
+  main_staging.dart           → bootstrap(Flavor.staging)
+  main_prod.dart              → bootstrap(Flavor.prod)
   core/
-    app_config.dart             Flavor enum (dev/qa/staging/prod) + per-flavor config
-    theme.dart                  high-contrast, large-text light + dark themes
+    app_config.dart           Flavor enum + per-flavor URLs + BACKEND_URL (dart-define)
+    theme.dart                high-contrast light + dark themes
   domain/
-    models.dart                 SeekrMode, AudioPriority, Utterance, DeviceConnectionState
+    models.dart               SeekrMode, AudioPriority, Utterance, DeviceConnectionState
   data/
-    device_service.dart         SIMULATED wearable — swap for real WiFi/EventChannel later
+    device_service.dart       simulated wearable stream (real device swaps here)
+    device_image_source.dart  DeviceImageSource interface
+    phone_camera_source.dart  PhoneCameraSource (stands in for real wearable camera)
   services/
-    tts_service.dart            TtsService interface + flutter_tts impl + noop fallback
-    audio_queue.dart            race-free priority queue: safety interrupts, normal queues
+    tts_service.dart          TtsService interface + flutter_tts impl + NoopTtsService
+    audio_queue.dart          race-free priority queue: safety interrupts, normal queues
+    connectivity_service.dart ConnectivityService + retry/backoff + NoopConnectivityService
+    local_vision_service.dart ML Kit OCR + labeling + barcode + NoopLocalVisionService
+    cloud_vision_service.dart HTTP multipart → FastAPI backend + NoopCloudVisionService
+    vision_router.dart        Tier1/Tier2 routing by task × connectivity × trigger
   controllers/
-    seekr_controller.dart       GetX controller: stream -> mode logic -> audio queue -> TTS
+    seekr_controller.dart     GetX controller: capture → route → audio queue → TTS
   views/
-    home_view.dart              accessible UI (Semantics, live regions, announcements)
+    home_view.dart            accessible UI (Semantics, live regions, mode grid, log)
+
+backend/
+  app/
+    main.py                   FastAPI: GET /health, POST /describe
+    models.py                 Pydantic v2: DescribeResponse
+    providers/
+      __init__.py             VisionProvider ABC + get_provider() factory
+      mock_provider.py        mock (default, no keys needed)
+      azure_openai_provider.py  GPT-4o-vision via Azure OpenAI (set env vars)
+  tests/
+    test_describe.py          6 pytest-asyncio tests (keyless, uses mock)
+
+android/app/src/main/kotlin/.../MainActivity.kt
+                              seekr/network MethodChannel:
+                              WifiNetworkSpecifier (device AP, app-scoped, no default route change)
+                              + cellular Network held for per-socket cloud calls
 ```
 
-**Talking points this code earns you:**
-- *State management:* GetX reactive observables (`.obs`, `Obx`) + DI (`Get.put`/`Get.find`).
-- *Flavors:* `AppConfig` shows dev/qa/staging/prod separation (the JD asks for this).
-- *Decoupling:* device + TTS both behind interfaces → mockable, swappable, future-proof.
-- *Concurrency:* the audio queue uses a single drain loop so audio can't overlap or reorder (a real race condition, handled).
-- *Accessibility:* Semantics, `liveRegion`, `SemanticsService.announce`, large text, dark mode.
-- *Offline-first thinking:* core modes are driven by the device, not the network (mention you'd add a Hive cache for cloud data).
+---
+
+## Needs Physical-Device / Real-Key Verification
+
+These cannot be automated — flag them as manual-only during demo:
+
+| What | Why |
+|------|-----|
+| Dual-network (device WiFi + cellular simultaneously) | Needs physical Android with SIM + separate no-internet WiFi. `WifiNetworkSpecifier` is Android 10+. |
+| GPT-4o-vision end-to-end | Needs `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_KEY` set. |
+| ML Kit OCR / barcode on real frames | Emulator camera returns nothing useful; needs physical device + real text/barcodes. |
+| TTS on Android | Behavior varies by OEM TTS engine; verify on target device. |
+| iOS build | Needs Xcode + provisioning profile. |
+| iOS multi-network | No `WifiNetworkSpecifier` equivalent on iOS — Android-only feature. |
+
+---
+
+## Key Engineering Decisions
+
+**Multi-network (Android):** `bindProcessToNetwork(cellular)` breaks the device WiFi socket — it binds the whole process. Correct: `WifiNetworkSpecifier` (Android 10+, app-scoped, doesn't change default route) so cellular stays default for internet; hold a cellular `Network` object for per-socket cloud calls.
+
+**Snapshot-on-trigger not continuous stream:** Matches Google Lookout, Envision, Be My AI. Continuous cloud streaming = prohibitive cost + latency + privacy risk. Tier-1 obstacle uses camera stream locally at low frame rate.
+
+**Audio queue with priority:** One earpiece, multiple speakers. Safety interrupt pre-empts queued descriptions; 3-second obstacle cooldown prevents spam; single drain loop prevents overlap.

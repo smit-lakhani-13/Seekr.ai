@@ -36,7 +36,8 @@ class AudioQueue {
     while (_queue.isNotEmpty) {
       final Utterance u = _queue.removeAt(0);
       onSpeakStart?.call(u.text);
-      await _tts.speak(u.text); // resolves on completion (awaitSpeakCompletion=true)
+      await _tts
+          .speak(u.text); // resolves on completion (awaitSpeakCompletion=true)
       onSpeakEnd?.call();
     }
     _draining = false;
