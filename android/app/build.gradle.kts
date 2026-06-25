@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.seekr.seekr_companion_demo"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "30.0.14904198"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
