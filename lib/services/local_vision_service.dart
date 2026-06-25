@@ -14,7 +14,7 @@ abstract class LocalVisionService {
   Future<void> dispose();
 }
 
-// ── ML Kit implementation (Android) ──────────────────────────────────────────
+// ── ML Kit implementation (Android/iOS) ──────────────────────────────────────
 
 class MlKitLocalVisionService implements LocalVisionService {
   final _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);

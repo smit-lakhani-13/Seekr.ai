@@ -1,6 +1,6 @@
 # CLAUDE.md — Project Context for Claude Code
 
-> Claude Code reads this file automatically. It is the standing context for this repo. Read it fully before doing anything. The separate kickoff prompt (`claude_code_kickoff_prompt.md`) contains the phased task list and build gates.
+> Claude Code reads this file automatically. It is the standing context for this repo. Read it fully before doing anything.
 
 ---
 
@@ -15,7 +15,9 @@ Smit Lakhani — Flutter + Python full-stack / tech-lead, ~3+ years, Mumbai (IST
 This is a **prototype companion app for an assistive-vision wearable**, built for an interview with **Seekr / Vidi Labs** (Hong Kong). Seekr makes a small clip-on camera wearable that helps **blind / low-vision / elderly** users by describing the world through audio. The company is moving toward **AI smart glasses** next.
 
 The repo currently contains:
-- `lib/` — an **accessibility-first Flutter demo** (GetX + clean architecture) that **simulates** the wearable with a mock data stream. Files: `core/` (flavors, theme), `domain/models.dart`, `data/device_service.dart` (SIMULATED device), `services/` (TTS behind an interface, a race-free priority `audio_queue.dart`), `controllers/seekr_controller.dart` (orchestration), `views/home_view.dart` (accessible UI). It runs on Chrome today.
+- `lib/` — an **accessibility-first Flutter demo** (GetX + clean architecture) that simulates the wearable and now includes the three-tier hybrid pipeline: `DeviceImageSource`/`PhoneCameraSource`, ML Kit `LocalVisionService`, FastAPI-backed `CloudVisionService`, `VisionRouter`, TTS behind an interface, a race-free priority `AudioQueue`, and accessible `HomeView` UI.
+- `backend/` — a FastAPI Tier-2 service with `POST /describe`, a keyless mock provider, and an env-gated Azure OpenAI vision provider.
+- `android/`, `ios/`, `web/` — Flutter platform scaffolds. Android has the native `seekr/network` channel for local-only WiFi AP + cellular network requests.
 - `docs/` — interview prep + architecture write-ups. **Read these** for the full product, JD, and architecture reasoning. Key ones: `seekr_founder_conversation_prep.md`, `seekr_round2_mock_and_practice_system.md` (Section 2 architecture, Section 3 AI/ML + the 1 Mbps pipeline), `seekr_round2_coding_prep.md`.
 
 ## 3. The product, precisely
@@ -52,22 +54,22 @@ TIER 2 — CLOUD (FastAPI on GCP App Service / Azure)  ← powerful, on-demand o
 
 ## 5. The networking piece (multi-network — get this exactly right)
 
-The phone is on the **device's local WiFi (no internet)** to receive frames, while it needs **internet over cellular** for Tier-2 cloud calls — **simultaneously**. Android does NOT reliably auto-switch (the "Android 12 auto-switches" claim is false; OEM-specific and flaky). Use the **multi-network binding API** via a `MethodChannel` to native Kotlin:
+The phone is on the **device's local WiFi (no internet)** to receive frames, while it needs **internet over cellular** for Tier-2 cloud calls — **simultaneously**. Android does NOT reliably auto-switch (the "Android 12 auto-switches" claim is false; OEM-specific and flaky). Use Android's multi-network APIs via a `MethodChannel` to native Kotlin, but **do not call `bindProcessToNetwork()` as the default design** because it binds the whole app process and can break the local device WiFi socket.
 
 ```kotlin
 val cm = getSystemService(ConnectivityManager::class.java)
-val request = NetworkRequest.Builder()
+val cellularRequest = NetworkRequest.Builder()
     .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     .build()
-cm.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
+cm.requestNetwork(cellularRequest, object : ConnectivityManager.NetworkCallback() {
     override fun onAvailable(network: Network) {
-        cm.bindProcessToNetwork(network)   // route app internet over cellular
+        cellularNetwork = network          // hold for network-specific sockets/requests
     }
     override fun onLost(network: Network) { /* notify Dart */ }
 })
 ```
-Detect failures by `SocketException`/timeout (an HTTP 4xx/5xx means the network worked). Retry once on the bound network; on repeated failure, exponential backoff + a TTS message. `connectivity_plus` can *detect* state but the binding must be native.
+For Android 10+, connect to the wearable AP with `WifiNetworkSpecifier` so the AP is app-scoped/local-only and does not become the default internet route. For lower-level sockets, use `network.openConnection(...)`, `network.socketFactory`, or `bindSocket` per request/socket rather than process-wide binding. Detect failures by `SocketException`/timeout (an HTTP 4xx/5xx means the network worked). Retry once, then exponential backoff + a TTS message. `connectivity_plus` can *detect* state but network selection must be native.
 
 ## 6. Coding standards
 
@@ -78,10 +80,11 @@ Detect failures by `SocketException`/timeout (an HTTP 4xx/5xx means the network 
 
 ## 7. CRITICAL GOTCHAS (read before building)
 
-1. **There is no `android/` (or `ios/`, `web/`) folder yet** — `lib/` + `pubspec.yaml` only. `flutter build apk` **will fail** until platforms are scaffolded. Run `flutter create --platforms=android,ios,web .` first (it preserves existing `lib/` and `pubspec.yaml`, only adding missing platform folders). Then `flutter pub get`, then build.
-2. The demo currently streams a **distance double**, not images. Adding real-time **image** capture/transmission is new work (Phase 2+). Without the real wearable, use the **phone camera as a stand-in "device camera"** behind the same `DeviceImageSource` interface, so the real device drops in later.
-3. No real cloud keys are committed. Build the Tier-2 backend fully, but gate live calls behind env vars; provide a mock/echo mode so the pipeline runs end-to-end without keys, with clear `TODO(human): set AZURE_/GCP_/OPENAI_ keys`.
+1. Platform folders already exist. Do **not** re-run `flutter create` unless you intentionally want to refresh generated scaffolding.
+2. The real wearable is not available. `PhoneCameraSource` is the stand-in behind `DeviceImageSource`; the real device should replace only that data-source layer.
+3. No real cloud keys are committed. Keep Tier-2 live calls behind env vars; mock mode must run end-to-end without keys.
 4. The real multi-network behaviour can only be fully verified **on a physical Android device with a SIM + a separate WiFi-without-internet**. On emulator/desktop, build it correctly and unit-test the logic; flag what needs on-device verification.
+5. iOS has no exact equivalent to Android `WifiNetworkSpecifier`; treat dual-network routing as Android-specific and iOS best-effort.
 
 ## 8. Working agreement
 

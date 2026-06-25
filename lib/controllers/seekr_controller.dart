@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 
 import '../data/device_image_source.dart';
+import '../services/connectivity_service.dart';
 import '../services/local_vision_service.dart';
 import '../data/device_service.dart';
 import '../services/vision_router.dart';
@@ -125,8 +126,7 @@ class SeekrController extends GetxController {
   }
 
   /// Snapshot-on-trigger: initialize source if needed, capture one frame,
-  /// announce result. Phase 3 will replace the stub announcement with a real
-  /// cloud API call; interface is stable so nothing else changes.
+  /// route it through the hybrid vision router, then speak the result.
   Future<void> captureAndDescribe() async {
     if (isCapturing.value) return; // debounce rapid taps
     isCapturing.value = true;
@@ -169,9 +169,15 @@ class SeekrController extends GetxController {
     _connSub?.cancel();
     _descriptionTimer?.cancel();
     _device.dispose();
-    // Close ML Kit recognizers; fire-and-forget since onClose is void.
+    // Close platform resources; fire-and-forget since GetX onClose is void.
+    try {
+      unawaited(Get.find<DeviceImageSource>().dispose());
+    } catch (_) {}
     try {
       unawaited(Get.find<LocalVisionService>().dispose());
+    } catch (_) {}
+    try {
+      Get.find<ConnectivityService>().dispose();
     } catch (_) {}
     super.onClose();
   }

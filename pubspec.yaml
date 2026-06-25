@@ -12,7 +12,7 @@ dependencies:
   get: ^4.6.6          # state management + DI + routing (matches my production stack)
   flutter_tts: ^4.0.0  # text-to-speech; supports web/iOS/Android/macOS/Windows
   connectivity_plus: ^6.0.0  # detect connectivity state (wifi/cellular/none); binding stays native
-  http: ^1.2.0               # cloud API calls (Tier 2); ponytail: plain http over dio, sufficient here
+  http: ^1.2.0               # cloud API calls (Tier 2); plain http is sufficient here
   camera: ^0.11.0            # phone camera as stand-in for wearable (Phase 2)
   flutter_image_compress: ^2.3.0  # downscale + JPEG compress frames before cloud upload
   permission_handler: ^11.3.0     # runtime CAMERA permission request

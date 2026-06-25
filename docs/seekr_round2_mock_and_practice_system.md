@@ -28,7 +28,7 @@ Run this end-to-end with a timer. For each question: read it, answer **out loud*
 **Q1.1 — "Good to see you again, Smit. Since our last call, anything new you've built or thought about regarding what we discussed?"**
 
 - ❌ *Weak:* "Not really, just been waiting for this round." (Passive, no initiative.)
-- ✅ *Strong:* "Yeah — after our last conversation I went back and actually used both your apps end to end. I noticed the companion app is iOS-only and the main app is fairly large on disk, so I sketched out how I'd approach an Android companion build and a size audit. I also revisited that WiFi-to-cellular problem we discussed and dug into the exact Android multi-network API for it — happy to go deeper if useful." (Initiative, specificity, follow-through.)
+- ✅ *Strong:* "Yeah — after our last conversation I went back and actually used both your apps end to end. I noted opportunities around Android reliability, device connectivity, app-size, and accessibility declarations, so I sketched out how I'd approach those. I also revisited that WiFi-to-cellular problem we discussed and dug into the exact Android multi-network API for it — happy to go deeper if useful." (Initiative, specificity, follow-through.)
 
 **Q1.2 — "Tell me briefly about your current setup — what are you working on day to day?"**
 - ✅ *Strong:* Keep it to 30 seconds — sole tech lead at AI Wellness (HIPAA-aware Flutter health app, 4 US clinics, 35 App Store releases in 7 months), tech lead at GenZDealZ (AI student marketplace, 10K+ users, GPT-5.4 Mini agent system). Then pivot: "But I'm looking to move into a single full-time focus, which is part of why Seekr interests me." *(This pre-loads the two-jobs answer — see v2 Part 12.)*
@@ -143,7 +143,7 @@ Ask 3–4 from v2 Part 13. Strongest closers:
 - "What state management + architecture is the current codebase on, so I know what I'd step into?"
 - "Biggest pain at the app↔model boundary — latency, output phrasing, mode-switching?"
 - "Does the device send raw inference labels or embeddings the app post-processes?"
-- "Is an Android companion build / app-size reduction on the roadmap? Both feel like early wins I could own."
+- "Are Android reliability, device connectivity, or app-size reduction on the roadmap? Those feel like early wins I could own."
 
 **Close:** "Thanks — this was a great conversation. I'm genuinely excited about the mission and I think my mobile + AI background is a strong fit. What are the next steps?"
 
@@ -523,7 +523,7 @@ EventChannel(messenger, "seekr/distance_stream").setStreamHandler(
   })
 ```
 
-**4.2.3 — Bind a request to cellular (the corrected WiFi answer, native side).** See v2 Part 5 Q1 — `requestNetwork(TRANSPORT_CELLULAR + NET_CAPABILITY_INTERNET)` → `bindProcessToNetwork()` in `onAvailable`.
+**4.2.3 — Multi-network route selection (the corrected WiFi answer, native side).** See v2 Part 5 Q1 — `WifiNetworkSpecifier` for local-only device AP + `requestNetwork(TRANSPORT_CELLULAR + NET_CAPABILITY_INTERNET)` for cellular; avoid process-wide `bindProcessToNetwork()` as the default.
 
 ## 4.3 — FastAPI / app services (your backend stack)
 

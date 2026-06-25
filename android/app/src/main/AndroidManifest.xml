@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Network permissions: INTERNET for general connectivity,
-         ACCESS/CHANGE_NETWORK_STATE for the cellular-binding fallback
-         (ConnectivityManager.requestNetwork + bindProcessToNetwork). -->
+    <!-- Network permissions: INTERNET for cloud calls,
+         ACCESS/CHANGE_NETWORK_STATE for ConnectivityManager.requestNetwork. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />

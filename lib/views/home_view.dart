@@ -278,7 +278,7 @@ class _CameraPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ponytail: Get.find<DeviceImageSource>() is safe here — registered in main.dart before build.
+    // Registered in bootstrap() before the widget tree is built.
     final source = Get.find<DeviceImageSource>();
     final controller = source.cameraController;
 

@@ -153,12 +153,12 @@ backend/
       mock_provider.py        mock (default, no keys needed)
       azure_openai_provider.py  GPT-4o-vision via Azure OpenAI (set env vars)
   tests/
-    test_describe.py          6 pytest-asyncio tests (keyless, uses mock)
+    test_describe.py          7 pytest-asyncio tests (keyless, uses mock)
 
 android/app/src/main/kotlin/.../MainActivity.kt
                               seekr/network MethodChannel:
                               WifiNetworkSpecifier (device AP, app-scoped, no default route change)
-                              + cellular Network held for per-socket cloud calls
+                              + cellular Network requested/monitored for cloud readiness
 ```
 
 ---
@@ -180,7 +180,7 @@ These cannot be automated — flag them as manual-only during demo:
 
 ## Key Engineering Decisions
 
-**Multi-network (Android):** `bindProcessToNetwork(cellular)` breaks the device WiFi socket — it binds the whole process. Correct: `WifiNetworkSpecifier` (Android 10+, app-scoped, doesn't change default route) so cellular stays default for internet; hold a cellular `Network` object for per-socket cloud calls.
+**Multi-network (Android):** `bindProcessToNetwork(cellular)` breaks the device WiFi socket — it binds the whole process. Correct: `WifiNetworkSpecifier` (Android 10+, app-scoped, doesn't change default route) so cellular stays default for internet; request/monitor a cellular `Network` for cloud readiness. If a future real-device transport needs raw sockets, bind those sockets per network rather than binding the whole process.
 
 **Snapshot-on-trigger not continuous stream:** Matches Google Lookout, Envision, Be My AI. Continuous cloud streaming = prohibitive cost + latency + privacy risk. Tier-1 obstacle uses camera stream locally at low frame rate.
 

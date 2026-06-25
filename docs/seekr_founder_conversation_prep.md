@@ -3,7 +3,7 @@
 **When:** Mon Jun 29 · 4:00–5:00 PM HKT = 1:30–2:30 PM IST
 **Room:** **Turzo Bose (CEO)** + **Reshika P V (CTO)** — both technical founders
 **Format:** Judgment-based conversation (qualifications · contribution · team fit) **+ a confirmed live coding round** ("have your laptop ready")
-**Companion docs:** `seekr_round2_coding_prep.md` (v2, syntax + coding), `seekr_round2_mock_and_practice_system.md` (mock + architecture + AI/ML), `seekr_interview_prep_june17.md` (company deep-dive). **This doc = the founder conversation + the live demo.**
+**Companion docs:** `seekr_round2_coding_prep.md` (v2, syntax + coding), `seekr_round2_mock_and_practice_system.md` (mock + architecture + AI/ML). **This doc = the founder conversation + the live demo.**
 
 ---
 
@@ -54,7 +54,7 @@ This was the biggest risk in earlier prep — now it's a **strength**, because t
 
 Lead with the **highest-leverage, most specific** items. These are mapped to gaps you found in their actual apps — frame them as opportunities, **not criticism of the founders' work**.
 
-1. **Ship the Android companion app.** "Your Seekr Companion app is iOS-only today. Your elderly/low-vision user base in India and China skews heavily Android — building the Android version is an obvious early win, and shipping both stores is exactly what I do now."
+1. **Improve companion-app reliability and Android experience.** "Your user base in India and China skews heavily Android, so I'd focus early on Android reliability, device connectivity, app size, and release quality across both stores."
 2. **Run an accessibility audit + declare it.** "Both apps currently declare no accessibility features on the App Store, so VIP users searching with accessibility filters can't find you. I'd audit every screen with TalkBack/VoiceOver in week one and declare the features — a credibility and discoverability win for an app built *for* this community."
 3. **The 1 Mbps device pipeline.** "At ~1 Mbps the real lever is sending inference *results* from the edge, not raw frames — bytes, not images. I'd help design that so latency-critical alerts stay instant." *(Full reasoning: mock-and-practice doc Section 3.7.)*
 4. **Firebase Analytics for the ML feedback loop.** "I'd instrument mode usage, inference latency, and TTS-replay events — that data feeds straight back into Reshika's model improvement cycle."
@@ -105,18 +105,18 @@ The JD looks generic. Read the subtext — this is what gets you the offer:
 
 | JD line | Surface ask | What they actually want |
 |---|---|---|
-| "Android applications… high-quality, efficient, scalable" + Flutter | Android dev | **Anchor the mobile function** so the founders can focus on hardware + ML. Their companion app is iOS-only → **Android is their weak spot**; you fill it. |
+| "Android applications… high-quality, efficient, scalable" + Flutter | Android dev | **Anchor the mobile function** so the founders can focus on hardware + ML. Android reliability, app size, and release quality are likely high-leverage areas. |
 | "Identifying and resolving… performance bottlenecks" | Bug fixing | Real latency/battery/bandwidth problems (1 Mbps stream, real-time audio). They want someone who's wrestled production performance — you have. |
 | "Conducting regular code reviews… code quality" | Process | They're scaling past founder-only code; they want **senior discipline** and someone juniors can learn from. |
 | "Providing technical guidance to other team members" | Teamwork | **Lead/mentor signal.** You're a Tech Lead — say it. They may want their first senior mobile hire to set standards. |
 | "Collaborating with Business and AI teams" | Soft skill | The app dev is the **bridge between Reshika's ML and the product**. You must speak both — and you do (you've shipped production ML). |
 | "Integrating databases, Firebase Analytics" + title "Database Management" | Firebase | **Firestore depth matters** — analytics that feed the ML loop, secure per-user data. Your AIW Firebase work maps directly. |
-| "TestFlight, App Store, Google Store" | Publishing | They want someone who owns **both pipelines** end to end (you do — they're partly iOS-only). |
+| "TestFlight, App Store, Google Store" | Publishing | They want someone who owns **both pipelines** end to end. |
 | "Updated with current trends… learn and adapt" | Buzzword | Small startup, fast pivots (clip-on → glasses). They want someone who **ramps on the unknown fast** — your ZEGOCLOUD-in-5-days story proves it. |
 
 **Out-of-the-box reads to voice if it fits:**
 - "It looks like you need someone to own mobile end to end so you two can stay focused on the device and the models — that's the role I'd want."
-- "Android feels like the immediate gap given the companion app is iOS-only — I'd close that first."
+- "Android reliability, device connectivity, and app-size reduction feel like immediate high-leverage areas I'd inspect first."
 
 ---
 
@@ -161,7 +161,7 @@ Answer out loud; keep each tight. Metrics over adjectives.
 9. **"How do you handle real-time data from a device?"** → EventChannel stream → controller → priority audio queue; throttle descriptions, interrupt for safety. (It's in the demo.)
 
 **Product / judgment**
-10. **"What would you improve about our app?"** → Section 3, framed as opportunities; lead with Android companion + accessibility declaration. Be tactful.
+10. **"What would you improve about our app?"** → Section 3, framed as opportunities; lead with Android reliability + accessibility declaration. Be tactful.
 11. **"What's hard about building for blind users?"** → "Everything is audio-first and safety-critical; the companion app needs flawless screen-reader semantics, and the failure mode of a missed alert is physical, not cosmetic."
 12. **"How do you prioritize with limited time?"** → "Highest user-safety and highest-leverage first. For Seekr: reliability of the device connection and the audio pipeline before cosmetic features."
 
@@ -174,7 +174,7 @@ Answer out loud; keep each tight. Metrics over adjectives.
 **Curveballs**
 17. **"You haven't built BLE/hardware apps — gap?"** → "I own the app layer the JD describes; I interface with the device over WiFi/API like any data source. I integrated ZEGOCLOUD and HeyGen real-time streams — same connection-state problem. I'd ask for the device protocol doc day one."
 18. **"We're early-stage, funding's uncertain — OK with risk?"** → "Yes — startup pace is where I do my best work and where ownership is highest. The CES award and HKSTP backing tell me the foundation is real."
-19. **"Have you used our app?"** → only a yes if true — **download both before Monday.** Then: "Yes — I went through onboarding on both; the companion app being iOS-only stood out as an early win I'd own."
+19. **"Have you used our app?"** → only a yes if true — **download both before Monday.** Then: "Yes — I went through onboarding and noted opportunities around Android reliability, app-size, accessibility declarations, and latency."
 20. **"What's your salary expectation?"** → Section 11 / cross-ref. Range, not floor.
 21. **"Can you start immediately?"** → "Fully available from July 1st."
 
@@ -195,7 +195,7 @@ Answer out loud; keep each tight. Metrics over adjectives.
 
 **Either:**
 - "How do you keep technical debt down shipping fast on a small team?"
-- "Is an Android companion build / app-size reduction already on the roadmap?"
+- "Are Android reliability, device connectivity, or app-size reduction already on the roadmap?"
 
 ---
 
@@ -253,7 +253,7 @@ Laptop ready = a live problem. Don't predict the topic (they said you can't). In
 ### THE 5 THINGS TO REMEMBER IN THE ROOM
 1. **They're founders deciding on a teammate** — be a calm senior peer, mission-aligned, low-ego.
 2. **Commitment answer is clean** — consultant + AIW winding down + free July 1, weekends. Say it without hesitation.
-3. **Lead contribution with specifics** — Android companion, accessibility, the 1 Mbps edge-result pipeline.
+3. **Lead contribution with specifics** — Android reliability, accessibility, the 1 Mbps edge-result pipeline.
 4. **Offer the demo, don't hijack** — 3–4 min, ask first, architecture → accessibility → audio-priority.
 5. **Coding round = think aloud.** Clarify, plan, narrate, test. Silence is the only failure.
 

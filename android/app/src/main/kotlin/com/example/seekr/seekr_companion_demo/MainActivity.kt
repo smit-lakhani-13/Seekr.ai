@@ -20,8 +20,10 @@ class MainActivity : FlutterActivity() {
     private val NETWORK_CHANNEL = "seekr/network"
     private val NETWORK_LOST_CHANNEL = "seekr/network_lost"
 
-    // ponytail: hold both Network objects for per-socket binding (not bindProcessToNetwork which is process-wide).
-    // Dart passes requests through the appropriate Network; device frames use wifiNetwork, cloud calls use cellularNetwork.
+    // Hold network requests instead of binding the whole process. The wearable AP is
+    // local-only; cloud traffic should continue to use the default internet route.
+    private var deviceWifiNetwork: Network? = null
+    private var deviceWifiCallback: ConnectivityManager.NetworkCallback? = null
     private var cellularNetwork: Network? = null
     private var cellularCallback: ConnectivityManager.NetworkCallback? = null
     private var networkLostSink: EventChannel.EventSink? = null
@@ -54,6 +56,10 @@ class MainActivity : FlutterActivity() {
                     // Requests and holds a cellular Network object. After connectToDeviceAP claims the
                     // device WiFi as a local-only network, cellular is already the default route.
                     "requestCellularNetwork" -> requestCellularNetwork(result)
+                    "releaseDeviceAP" -> {
+                        releaseDeviceAP()
+                        result.success(null)
+                    }
                     "releaseCellularNetwork" -> {
                         releaseCellularNetwork()
                         result.success(null)
@@ -86,6 +92,7 @@ class MainActivity : FlutterActivity() {
         }
 
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        releaseDeviceAP()
         val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
         if (bssid != null) specifierBuilder.setBssid(android.net.MacAddress.fromString(bssid))
 
@@ -94,17 +101,34 @@ class MainActivity : FlutterActivity() {
             .setNetworkSpecifier(specifierBuilder.build())
             .build()
 
-        cm.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
+        var completed = false
+        val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                // ponytail: do NOT bindProcessToNetwork here — that would break cellular.
-                // Frame fetches go through network.openConnection(url) when Phase 2 lands.
-                mainHandler.post { result.success(true) }
-                cm.unregisterNetworkCallback(this)
+                deviceWifiNetwork = network
+                mainHandler.post {
+                    if (!completed) {
+                        completed = true
+                        result.success(true)
+                    }
+                }
             }
             override fun onUnavailable() {
-                mainHandler.post { result.error("UNAVAILABLE", "Device AP not found", null) }
+                deviceWifiCallback = null
+                mainHandler.post {
+                    if (!completed) {
+                        completed = true
+                        result.error("UNAVAILABLE", "Device AP not found", null)
+                    }
+                }
             }
-        })
+            override fun onLost(network: Network) {
+                if (deviceWifiNetwork == network) {
+                    deviceWifiNetwork = null
+                }
+            }
+        }
+        deviceWifiCallback = callback
+        cm.requestNetwork(request, callback)
     }
 
     private fun requestCellularNetwork(result: MethodChannel.Result) {
@@ -137,7 +161,15 @@ class MainActivity : FlutterActivity() {
         cellularNetwork = null
     }
 
+    private fun releaseDeviceAP() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        deviceWifiCallback?.let { cm.unregisterNetworkCallback(it) }
+        deviceWifiCallback = null
+        deviceWifiNetwork = null
+    }
+
     override fun onDestroy() {
+        releaseDeviceAP()
         releaseCellularNetwork()
         super.onDestroy()
     }

@@ -506,23 +506,22 @@ The real scenario for Seekr: the wearable broadcasts its *own* local WiFi (or Wi
 
 Layered answer:
 1. **Detect the failure type.** Wrap the call. A `SocketException` / timeout = connectivity problem (an HTTP 4xx/5xx means the network worked — different bucket).
-2. **Explicitly request a cellular network and bind to it** via a platform channel to native Android:
+2. **Explicitly request the right networks without binding the whole process** via a platform channel to native Android:
 ```kotlin
 // Native Android (Kotlin) — invoked from a Flutter MethodChannel
 val cm = getSystemService(ConnectivityManager::class.java)
-val request = NetworkRequest.Builder()
+val cellularRequest = NetworkRequest.Builder()
     .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
     .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     .build()
-cm.requestNetwork(request, object : ConnectivityManager.NetworkCallback() {
+cm.requestNetwork(cellularRequest, object : ConnectivityManager.NetworkCallback() {
     override fun onAvailable(network: Network) {
-        cm.bindProcessToNetwork(network)   // route app traffic over cellular
-        // (or network.openConnection(url) to bind a single request)
+        cellularNetwork = network          // hold for network-specific sockets/requests
     }
 })
 ```
-This keeps the phone on the device's local WiFi for camera data **while** internet requests go over cellular — simultaneously. Enabling the developer/system setting "Mobile data always active" keeps the cellular radio warm so this is fast.
-3. **Retry once** on the bound network.
+For the device AP on Android 10+, use `WifiNetworkSpecifier` so the wearable WiFi is app-scoped/local-only and does not replace cellular as the default internet route. For lower-level sockets, bind per socket/request via `network.openConnection(url)`, `network.socketFactory`, or `bindSocket` — do **not** use `bindProcessToNetwork()` as the default because it binds the whole app and can break the wearable WiFi path.
+3. **Retry once** after requesting the cellular/default internet route.
 4. **Graceful degrade for a blind user:** if it still fails, don't leave a silent dead screen — speak it: TTS "Connection lost, please wait." Safety-first because the user can't see a spinner.
 
 ```dart
@@ -531,7 +530,7 @@ Future<Response> fetchWithFallback(Uri url) async {
   try {
     return await _client.get(url).timeout(const Duration(seconds: 5));
   } on SocketException {
-    await _platform.invokeMethod('bindToCellular');   // native multi-network bind
+    await _platform.invokeMethod('requestCellularNetwork');
     try {
       return await _client.get(url).timeout(const Duration(seconds: 5));
     } catch (_) {
@@ -541,7 +540,7 @@ Future<Response> fetchWithFallback(Uri url) async {
   }
 }
 ```
-*Why this lands:* Seekr said they already solved it — and `requestNetwork` + `bindProcessToNetwork` is almost certainly *how*. Articulating the exact API makes you sound like you already work there. Mention the Flutter package `connectivity_plus` for *detecting* network state, but note it only detects — the binding must be native.
+*Why this lands:* it distinguishes transport detection from route selection. Mention `connectivity_plus` for detecting network state, but note it only detects — route selection/local-only WiFi must be native.
 
 ### Q2. Seekr fires "obstacle ahead" and "scene description" at the same moment. Both produce audio. What plays first?
 
@@ -972,7 +971,7 @@ Honest, brief, no desperation, no games: "I'm exploring a few remote roles, yes.
 ### Curveballs specific to your situation (rehearse these)
 - **"You haven't shipped a BLE/hardware app — is that a gap?"** → "My focus is the app layer, which is what the JD specifies. The device firmware is your team's domain; I interface with it over WiFi/API like any external data source. I integrated ZEGOCLOUD and HeyGen real-time streams — same connection-state-machine problem. I'd ask for the device protocol doc day one and ramp in the first two weeks."
 - **"We're a tiny startup, funding is uncertain — are you OK with that risk?"** → "Yes. I've worked at startup pace for three years; early-stage is where I do my best work and where ownership is highest. The CES award and HKSTP backing tell me the foundation is solid."
-- **"Have you actually used our app?"** → ONLY safe if you have. **Action item: download both Seekr AI + Seekr Companion before Monday and try them.** Then: "Yes — I went through onboarding on both. I noticed the companion app is iOS-only; building the Android version is an obvious early win I'd want to own." (Specific, shows initiative.)
+- **"Have you actually used our app?"** → ONLY safe if you have. **Action item: download both Seekr AI + Seekr Companion before Monday and try them.** Then: "Yes — I went through onboarding on both. I noted opportunities around Android reliability, app size, accessibility declarations, and latency." (Specific, shows initiative.)
 - **"Your portfolio says X but you said Y…"** → Pre-empt by being consistent: 3+ years, Tech Lead (not CTO), GPT-5.4 Mini, 4 US clinics, 200+ gift cards. Never inflate.
 
 ### Behavioral framework: answer in **STAR**
@@ -1028,7 +1027,7 @@ End strong. Asking sharp questions signals seniority and genuine interest.
 7. "What does success look like for this role in the first 90 days?"
 
 **One that shows you did homework:**
-8. "I saw the companion app is iOS-only and the main app is ~267MB — are an Android companion build and app-size reduction on the roadmap? Both feel like early wins I could own."
+8. "I noticed app-size, Android reliability, and accessibility declarations are areas worth inspecting — are any of those already on the roadmap?"
 
 ---
 
@@ -1092,7 +1091,7 @@ Don't raise salary first — let them. If they ask early, give the range and mov
 
 **FLUTTER BUGS ON SIGHT:** setState after dispose (`if(!mounted)return;`) · setState in build · undisposed controllers · context across async gap · ListView in Column without Expanded.
 
-**WIFI ANSWER (corrected):** local device WiFi has no internet → use Android **multi-network API**: `requestNetwork(TRANSPORT_CELLULAR + NET_CAPABILITY_INTERNET)` → `bindProcessToNetwork()` in `onAvailable` → retry → TTS fallback. (Do NOT say "Android 12 auto-switches.")
+**WIFI ANSWER (corrected):** local device WiFi has no internet → use Android **multi-network API**: `WifiNetworkSpecifier` for local-only device AP + `requestNetwork(TRANSPORT_CELLULAR + NET_CAPABILITY_INTERNET)` for cellular; avoid process-wide `bindProcessToNetwork()` as the default; retry → TTS fallback. (Do NOT say "Android 12 auto-switches.")
 
 **ML ONE-LINERS:** edge AI = low latency + offline + private, constrained compute · CNN = conv+pool+ReLU+classify · **safety device → bias for RECALL** (a missed obstacle is dangerous; a false alarm is just annoying) · semantic search = embed + cosine similarity.
 
@@ -1100,7 +1099,7 @@ Don't raise salary first — let them. If they ask early, give the range and mov
 
 **TWO-JOBS ANSWER:** "Transitioning to a single full-time focus; Seekr would be my primary commitment. No competitive overlap. 2.5h overlap with HKT." (Decide your real version.)
 
-**5 QUESTIONS TO ASK:** codebase architecture? · app↔model pain point? · raw labels vs embeddings? · first-90-days success? · Android companion + app-size on roadmap?
+**5 QUESTIONS TO ASK:** codebase architecture? · app↔model pain point? · raw labels vs embeddings? · first-90-days success? · Android reliability + app-size on roadmap?
 
 ---
 

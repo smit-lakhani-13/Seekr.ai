@@ -23,7 +23,7 @@ abstract class DeviceImageSource {
 }
 
 // ── Simulated source (for tests / web) ───────────────────────────────────────
-// ponytail: no-op source keeps tests free of platform channels.
+// No-op source keeps tests free of platform channels.
 
 class SimulatedImageSource implements DeviceImageSource {
   @override

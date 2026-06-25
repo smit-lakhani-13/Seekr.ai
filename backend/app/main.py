@@ -29,7 +29,7 @@ async def describe(
     if not image_bytes:
         raise HTTPException(status_code=422, detail="Empty image")
 
-    # ponytail: provider instantiated per-request; fine for mock, acceptable for azure (stateless HTTP).
+    # Provider is stateless; per-request construction keeps mock/live selection simple.
     provider = get_provider()
     text = await provider.describe(image_bytes=image_bytes, task=task, question=question)
     return DescribeResponse(text=text, provider=provider.name)
